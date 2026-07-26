@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a reproducible problem with GeoQC.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please do not use this
+        form for suspected security vulnerabilities — follow [SECURITY.md](https://github.com/GeoQC/geoqc/security/policy) instead.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: >
+        Minimal steps or code to reproduce the issue. Include a minimal
+        dataset or geometry if the bug depends on specific input data.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: geoqc-version
+    attributes:
+      label: GeoQC version
+      description: Output of `python -m pip show geoqc` or `geoqc --version`.
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version and platform
+      description: Output of `python --version` and your OS.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output or traceback
+      render: shell
+    validations:
+      required: false

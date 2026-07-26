@@ -1,0 +1,34 @@
+name: Feature request
+description: Suggest an enhancement for GeoQC.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing issues first. Per [CONTRIBUTING.md](https://github.com/GeoQC/geoqc/blob/main/CONTRIBUTING.md),
+        open an issue before starting substantial work so scope and design can
+        be agreed before a pull request.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case or limitation you're running into.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like GeoQC to do? Include a rough API or CLI shape if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or alternative approaches you've considered.
+    validations:
+      required: false
