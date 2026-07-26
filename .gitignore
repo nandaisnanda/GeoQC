@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.tsbuildinfo
+.coverage
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+coverage.xml
+htmlcov/
+dist/
+.tmp/
+
+# JavaScript
+apps/web/
+apps/web/node_modules/
+apps/web/dist/
+apps/web/*.tsbuildinfo
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local configuration and generated output
+.env
+.env.*
+!.env.example
+data/
+reports/
+AUDIT_REPORT*.md
+coverage-audit.json
