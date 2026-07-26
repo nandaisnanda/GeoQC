@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#101713"/>
+  <circle cx="970" cy="100" r="320" fill="#16794d" opacity=".35"/>
+  <text x="100" y="300" fill="#fff" font-family="system-ui,sans-serif" font-size="150" font-weight="800">GeoQC</text>
+  <text x="110" y="390" fill="#9fceb5" font-family="system-ui,sans-serif" font-size="48">Typed GIS quality control</text>
+</svg>

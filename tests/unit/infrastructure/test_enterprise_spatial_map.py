@@ -28,9 +28,7 @@ def test_duplicate_map_contains_similarity_layers_and_supports_empty_reports(
     )
 
     populated = renderer.duplicates(report, tmp_path / "nested" / "duplicates.html")
-    empty = renderer.duplicates(
-        SpatialDuplicateReport(0, 0, 0, 0, ()), tmp_path / "empty.html"
-    )
+    empty = renderer.duplicates(SpatialDuplicateReport(0, 0, 0, 0, ()), tmp_path / "empty.html")
 
     assert populated.exists()
     assert "100.00% similar" in _html(populated)

@@ -38,8 +38,7 @@ class EnterpriseSpatialMap:
         result = _map(value for pair in report.pairs for value in (pair.left_wkt, pair.right_wkt))
         for pair in report.pairs:
             tooltip = (
-                f"Pair {pair.left_index}/{pair.right_index}: "
-                f"{pair.similarity_percent:.2f}% similar"
+                f"Pair {pair.left_index}/{pair.right_index}: {pair.similarity_percent:.2f}% similar"
             )
             for value, color, name in (
                 (pair.left_wkt, "#2563eb", "Duplicate left"),
@@ -79,8 +78,7 @@ class EnterpriseSpatialMap:
                     _geojson(value),
                     name=f"{item.kind.value} · {side}",
                     tooltip=(
-                        f"{item.kind.value}: "
-                        f"{item.geometry_similarity_percent:.2f}% geometry match"
+                        f"{item.kind.value}: {item.geometry_similarity_percent:.2f}% geometry match"
                     ),
                     style_function=lambda _, color=colors[item.kind.value], side=side: {
                         "color": color,

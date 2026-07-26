@@ -57,9 +57,7 @@ def test_api_exposes_geometry_validation_route() -> None:
 def test_enterprise_spatial_api_contracts() -> None:
     """Enterprise endpoints expose similarity, differences, severity, and priorities."""
     square = "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))"
-    duplicates = CLIENT.post(
-        "/api/spatial/duplicates", json={"geometries_wkt": [square, square]}
-    )
+    duplicates = CLIENT.post("/api/spatial/duplicates", json={"geometries_wkt": [square, square]})
     comparison = CLIENT.post(
         "/api/spatial/compare",
         json={

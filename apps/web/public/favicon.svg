@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GeoQC">
+  <rect width="64" height="64" rx="14" fill="#0a0a0b"/>
+  <path d="M17 18h30v8H25v17h14v-6h-8v-7h16v20H17z" fill="#fff"/>
+</svg>

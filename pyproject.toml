@@ -33,9 +33,9 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/GeoQC/geoqc#readme"
-Issues = "https://github.com/GeoQC/geoqc/issues"
-Repository = "https://github.com/GeoQC/geoqc"
+Documentation = "https://github.com/nandaisnanda/GeoQC#readme"
+Issues = "https://github.com/nandaisnanda/GeoQC/issues"
+Repository = "https://github.com/nandaisnanda/GeoQC"
 
 [project.scripts]
 geoqc = "geoqc.interfaces.cli.main:run"

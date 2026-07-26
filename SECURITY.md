@@ -13,8 +13,8 @@ release on PyPI receives security fixes.
 
 Do not open a public GitHub issue for a suspected security vulnerability.
 
-Report it privately using [GitHub's private vulnerability reporting](https://github.com/GeoQC/geoqc/security/advisories/new)
-(Security tab -> Report a vulnerability) on the [GeoQC repository](https://github.com/GeoQC/geoqc).
+Report it privately using [GitHub's private vulnerability reporting](https://github.com/nandaisnanda/GeoQC/security/advisories/new)
+(Security tab -> Report a vulnerability) on the [GeoQC repository](https://github.com/nandaisnanda/GeoQC).
 This opens a private advisory visible only to the maintainers until a fix is
 ready.
 

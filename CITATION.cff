@@ -9,8 +9,8 @@ authors:
 license: MIT
 version: 0.1.0
 date-released: "2026-07-24"
-repository-code: https://github.com/GeoQC/geoqc
-url: https://github.com/GeoQC/geoqc
+repository-code: https://github.com/nandaisnanda/GeoQC
+url: https://github.com/nandaisnanda/GeoQC
 keywords:
   - gis
   - quality-control

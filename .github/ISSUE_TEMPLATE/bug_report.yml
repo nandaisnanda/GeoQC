@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for taking the time to report a bug. Please do not use this
-        form for suspected security vulnerabilities — follow [SECURITY.md](https://github.com/GeoQC/geoqc/security/policy) instead.
+        form for suspected security vulnerabilities — follow [SECURITY.md](https://github.com/nandaisnanda/GeoQC/security/policy) instead.
 
   - type: textarea
     id: description

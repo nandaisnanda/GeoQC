@@ -48,7 +48,7 @@ reverse proxy before exposing it beyond your own machine.
 ## How do I report a bug or request a feature?
 
 Open an issue using the bug report or feature request template on
-[GitHub Issues](https://github.com/GeoQC/geoqc/issues). For anything
+[GitHub Issues](https://github.com/nandaisnanda/GeoQC/issues). For anything
 that could be a security vulnerability, follow [SECURITY.md](../SECURITY.md)
 instead of filing a public issue.
 

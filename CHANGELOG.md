@@ -6,8 +6,13 @@ All notable changes to GeoQC are documented here. This project follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-26
+
 ### Added
 
+- Initial typed geometry-validation API and clean-architecture project layout.
+- CRS, datum-shift, axis-order, attribute, rule-engine, batch, and reporting
+  building blocks.
 - Intelligent topology repair: minimal-change fixes for self-intersections,
   invalid rings, duplicate vertices, and slivers on a single geometry, plus
   cross-feature overlap resolution (deterministic erase policy) and enclosed-gap
@@ -84,13 +89,5 @@ All notable changes to GeoQC are documented here. This project follows
 - The optional API's interactive documentation can now be disabled in
   production via `GEOQC_ENVIRONMENT=production`.
 
-## [0.1.0] - 2026-07-24
-
-### Added
-
-- Initial typed geometry-validation API and clean-architecture project layout.
-- CRS, datum-shift, axis-order, attribute, rule-engine, batch, and reporting
-  building blocks.
-
-[Unreleased]: https://github.com/GeoQC/geoqc/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/GeoQC/geoqc/releases/tag/v0.1.0
+[Unreleased]: https://github.com/nandaisnanda/GeoQC/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/nandaisnanda/GeoQC/releases/tag/v0.1.0
