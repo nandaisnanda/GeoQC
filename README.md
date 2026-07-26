@@ -1,6 +1,5 @@
 # GeoQC
 
-[![CI](https://github.com/GeoQC/geoqc/actions/workflows/ci.yml/badge.svg)](https://github.com/GeoQC/geoqc/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/geoqc.svg)](https://pypi.org/project/geoqc/)
 [![Python versions](https://img.shields.io/pypi/pyversions/geoqc.svg)](https://pypi.org/project/geoqc/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
