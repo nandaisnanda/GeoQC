@@ -1,8 +1,8 @@
 # GeoQC
 
-[![PyPI](https://img.shields.io/pypi/v/geoqc.svg)](https://pypi.org/project/geoqc/)
-[![Python versions](https://img.shields.io/pypi/pyversions/geoqc.svg)](https://pypi.org/project/geoqc/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/geoqc.svg?color=brightgreen&cacheSeconds=300&v=0.1.0)](https://pypi.org/project/geoqc/)
+[![Python versions](https://img.shields.io/pypi/pyversions/geoqc.svg?color=brightgreen&cacheSeconds=300&v=0.1.0)](https://pypi.org/project/geoqc/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg?v=0.1.0)](LICENSE)
 
 **GeoQC** is a typed Python toolkit for quality control of geospatial data. It
 detects common geometry defects and provides reusable building blocks for CRS,
