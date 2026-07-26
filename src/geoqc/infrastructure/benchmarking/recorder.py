@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar, cast
 
 from geoqc.application.benchmarking import BenchmarkContext, BenchmarkMetrics
 
@@ -59,8 +59,9 @@ def _windows_process_memory() -> tuple[int, int]:
 
     counters = ProcessMemoryCounters()
     counters.cb = ctypes.sizeof(counters)
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    ctypes_api = cast(Any, ctypes)
+    kernel32 = ctypes_api.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes_api.WinDLL("psapi", use_last_error=True)
     process = kernel32.GetCurrentProcess()
     if not psapi.GetProcessMemoryInfo(process, ctypes.byref(counters), counters.cb):
         return 0, 0

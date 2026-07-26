@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from typing import Any, cast
 
 import shapely
 
@@ -127,11 +128,12 @@ def _available_memory() -> int | None:
 
             status = _MemoryStatus()
             status.length = ctypes.sizeof(status)
-            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            ctypes_api = cast(Any, ctypes)
+            if ctypes_api.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
                 return int(status.available_physical)
-        sysconf = os.sysconf  # type: ignore[attr-defined]
-        pages = sysconf("SC_AVPHYS_PAGES")
-        page_size = sysconf("SC_PAGE_SIZE")
+        os_api = cast(Any, os)
+        pages = os_api.sysconf("SC_AVPHYS_PAGES")
+        page_size = os_api.sysconf("SC_PAGE_SIZE")
         return int(pages * page_size)
     except (AttributeError, OSError, ValueError):
         return None

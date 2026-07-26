@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const projectRoot = resolve(import.meta.dirname, "../..");
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 describe("web release integration", () => {
   it("keeps the browser format allowlist aligned with the API", () => {
