@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: If you use GeoQC in your research or software, please cite it using the metadata below.
+title: GeoQC
+abstract: Typed GIS quality-control toolkit for Python, providing geometry, CRS, datum, axis-order, and attribute validation with a hardened optional API.
+type: software
+authors:
+  - family-names: Gunawan
+    given-names: Ananda
+license: MIT
+version: 0.1.0
+date-released: "2026-07-24"
+repository-code: https://github.com/GeoQC/geoqc
+url: https://github.com/GeoQC/geoqc
+keywords:
+  - gis
+  - quality-control
+  - geospatial
+  - geopandas
+  - shapely
