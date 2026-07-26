@@ -1,0 +1,1 @@
+"""Tests enforcing architectural boundaries."""
