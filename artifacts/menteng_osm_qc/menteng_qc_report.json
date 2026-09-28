@@ -1,0 +1,182 @@
+{
+  "source": {
+    "provider": "OpenStreetMap via Overpass API",
+    "licence": "ODbL 1.0 (c) OpenStreetMap contributors",
+    "area": "Menteng, Jakarta Pusat, Indonesia",
+    "sample_km2": 4.0,
+    "window_wgs84": {
+      "south": -6.198904385740086,
+      "west": 106.81472978447604,
+      "north": -6.180759012193271,
+      "east": 106.83273672204047
+    },
+    "projected_crs": "EPSG:32748",
+    "seed": 20260726,
+    "defects": "genuine, present in the OSM database; nothing injected or mocked"
+  },
+  "before": {
+    "feature_count": 5032,
+    "invalid_features": 0,
+    "invalid_issue_counts": {},
+    "overlapping_pairs": 28,
+    "overlapping_area_m2": 46487.308,
+    "features_in_overlap": 35,
+    "small_polygon_findings": 1,
+    "duplicate_pairs": 1,
+    "total_area_m2": 1441216.387
+  },
+  "after": {
+    "feature_count": 5032,
+    "invalid_features": 0,
+    "invalid_issue_counts": {},
+    "overlapping_pairs": 21,
+    "overlapping_area_m2": 23697.36,
+    "features_in_overlap": 24,
+    "small_polygon_findings": 1,
+    "duplicate_pairs": 1,
+    "total_area_m2": 1418428.404
+  },
+  "repair": {
+    "config": {
+      "remove_duplicate_vertices": true,
+      "duplicate_vertex_tolerance": 0.0,
+      "fix_invalid": true,
+      "remove_slivers": true,
+      "sliver_area_threshold": 0.5,
+      "sliver_thinness_threshold": 0.001,
+      "resolve_overlaps": true,
+      "fill_gaps": true,
+      "gap_area_threshold": 2.0,
+      "max_shape_shift": null,
+      "max_relative_area_change": null
+    },
+    "elapsed_seconds": 86545.99,
+    "total": 5032,
+    "repaired": 7,
+    "unchanged": 5007,
+    "failed": 18,
+    "action_counts": {
+      "gap": 2,
+      "overlap": 5
+    },
+    "total_area_delta_m2": -22787.983,
+    "max_shape_shift_m": 78.6821,
+    "undo_available": true,
+    "failure_reasons": {
+      "Candidate repair would erase the entire geometry.": 18
+    },
+    "failed_features": [
+      {
+        "feature_index": 4890,
+        "osm_id": 849812138,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4891,
+        "osm_id": 849812139,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4892,
+        "osm_id": 849812140,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4893,
+        "osm_id": 849812141,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4894,
+        "osm_id": 849812142,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4935,
+        "osm_id": 1049210638,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4936,
+        "osm_id": 1049210639,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4945,
+        "osm_id": 1193274377,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4946,
+        "osm_id": 1193274378,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4947,
+        "osm_id": 1193274379,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 4955,
+        "osm_id": 1244102880,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 5016,
+        "osm_id": 1507033890,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 5017,
+        "osm_id": 1507033897,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 5018,
+        "osm_id": 1507033899,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 5019,
+        "osm_id": 1507033900,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 5020,
+        "osm_id": 1507033901,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 5021,
+        "osm_id": 1507033902,
+        "reason": "Candidate repair would erase the entire geometry."
+      },
+      {
+        "feature_index": 5029,
+        "osm_id": 1514023978,
+        "reason": "Candidate repair would erase the entire geometry."
+      }
+    ]
+  },
+  "delta": {
+    "overlapping_pairs": -7,
+    "overlapping_area_m2": -22789.948,
+    "total_area_m2": -22787.983
+  },
+  "outputs": [
+    "menteng_osm_after.cpg",
+    "menteng_osm_after.dbf",
+    "menteng_osm_after.jpg",
+    "menteng_osm_after.prj",
+    "menteng_osm_after.shp",
+    "menteng_osm_after.shx",
+    "menteng_osm_before.cpg",
+    "menteng_osm_before.dbf",
+    "menteng_osm_before.jpg",
+    "menteng_osm_before.prj",
+    "menteng_osm_before.shp",
+    "menteng_osm_before.shx",
+    "menteng_qc_report.json",
+    "overpass_response.json"
+  ]
+}

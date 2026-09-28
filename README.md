@@ -39,6 +39,10 @@ library always agree on what is valid. See [Architecture](docs/architecture.md).
   [intelligent topology repair](docs/topology-repair.md).
 - Read common vector datasets through GeoPandas and Pyogrio, including
   Shapefile, GeoJSON, GeoPackage, and FlatGeobuf.
+- Analyze and repair road networks, including every `MultiLineString` part,
+  dangling/broken connections, duplicate segments, unnoded intersections,
+  conservative endpoint snapping, full intersection noding, and source-feature
+  provenance. The `geoqc repair-roads` CLI writes a new GeoPackage atomically.
 - Stream GeoPackage, Shapefile, GeoJSON, and GeoParquet audits in bounded
   Arrow chunks without loading the complete dataset into RAM.
 - Audit independent datasets concurrently with memory-aware process scheduling,
@@ -108,6 +112,7 @@ The initial CLI exposes package information and a stable command surface:
 geoqc --help
 geoqc --version
 geoqc audit path/to/folder
+geoqc repair-roads roads.shp repaired.gpkg --snap-tolerance 0.1
 ```
 
 Worker count is selected automatically; use `--workers N` as a safe upper bound.

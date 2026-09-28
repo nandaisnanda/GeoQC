@@ -1,0 +1,11 @@
+{
+  "geoqc_version": "0.1.0",
+  "geoqc_loaded_from": "C:\\Users\\ACER\\Downloads\\Jobs\\Portofolio\\GeoQC\\.geoqc-pypi-test\\Lib\\site-packages\\geoqc\\__init__.py",
+  "polygons_kept": 480,
+  "skipped_open_ways": 2,
+  "skipped_degenerate": 12,
+  "invalid_features_geoqc": 0,
+  "invalid_features_shapely": 0,
+  "issue_type_counts": {},
+  "findings": []
+}

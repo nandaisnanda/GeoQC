@@ -1,0 +1,73 @@
+{
+  "source": "C:\\Users\\ACER\\Downloads\\Jobs\\Portofolio\\GeoQC\\testdata",
+  "output": "C:\\Users\\ACER\\Downloads\\Jobs\\Portofolio\\GeoQC\\artifacts\\testdata_topology_repair_v2\\geoqc_testdata_repaired.gpkg",
+  "crs": "EPSG:32749",
+  "source_layers": [
+    {
+      "file": "jalanarteri.shp",
+      "feature_count": 10,
+      "geometry_types": {
+        "LineString": 9,
+        "MultiLineString": 1
+      },
+      "crs": "EPSG:32749"
+    },
+    {
+      "file": "jalankolektor.shp",
+      "feature_count": 24,
+      "geometry_types": {
+        "LineString": 21,
+        "MultiLineString": 3
+      },
+      "crs": "EPSG:32749"
+    },
+    {
+      "file": "jalanlokal.shp",
+      "feature_count": 199,
+      "geometry_types": {
+        "LineString": 196,
+        "MultiLineString": 3
+      },
+      "crs": "EPSG:32749"
+    }
+  ],
+  "config": {
+    "snap_tolerance": 0.1,
+    "minimum_segment_length": 1e-08
+  },
+  "repair": {
+    "input_feature_count": 233,
+    "input_part_count": 245,
+    "snapped_endpoint_count": 19,
+    "output_segment_count": 537
+  },
+  "audit_before": {
+    "feature_count": 233,
+    "line_part_count": 245,
+    "invalid_feature_count": 0,
+    "non_simple_feature_count": 1,
+    "unnoded_intersection_pair_count": 302,
+    "linear_overlap_pair_count": 0,
+    "near_gap_endpoint_count": 23,
+    "dead_end_endpoint_count": 336,
+    "sub_meter_line_part_count": 3,
+    "exact_duplicate_segment_count": 0,
+    "total_length": 156931.72134190216,
+    "minimum_segment_length": 0.0009785932738404508
+  },
+  "audit_after": {
+    "feature_count": 537,
+    "line_part_count": 537,
+    "invalid_feature_count": 0,
+    "non_simple_feature_count": 0,
+    "unnoded_intersection_pair_count": 0,
+    "linear_overlap_pair_count": 0,
+    "near_gap_endpoint_count": 0,
+    "dead_end_endpoint_count": 50,
+    "sub_meter_line_part_count": 5,
+    "exact_duplicate_segment_count": 0,
+    "total_length": 156931.80328208173,
+    "minimum_segment_length": 0.0009785932181516353
+  },
+  "verification_passed": true
+}

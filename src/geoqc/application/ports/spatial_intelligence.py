@@ -7,6 +7,8 @@ from geoqc.domain.models.spatial_intelligence import (
     BoundarySnapConfig,
     BoundarySnapResult,
     RoadNetworkConfig,
+    RoadNetworkRepairConfig,
+    RoadNetworkRepairResult,
     RoadNetworkReport,
     SmallPolygonConfig,
     SmallPolygonReport,
@@ -23,6 +25,12 @@ class RoadNetworkAnalyzer(Protocol):
     def analyze(
         self, geometries_wkt: Sequence[str], config: RoadNetworkConfig
     ) -> RoadNetworkReport: ...
+
+
+class RoadNetworkRepairer(Protocol):
+    def repair(
+        self, geometries_wkt: Sequence[str], config: RoadNetworkRepairConfig
+    ) -> RoadNetworkRepairResult: ...
 
 
 class SmallPolygonAnalyzer(Protocol):

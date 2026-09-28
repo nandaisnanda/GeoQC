@@ -6,6 +6,19 @@ All notable changes to GeoQC are documented here. This project follows
 
 ## [Unreleased]
 
+### Added
+
+- Public `repair_road_network` API with conservative endpoint snapping, full
+  intersection noding, and source-feature provenance.
+- Safe `geoqc repair-roads` file workflow with attribute preservation, atomic
+  GeoPackage output, CRS/layer/size validation, overwrite protection, and an
+  optional JSON report.
+
+### Fixed
+
+- Road analysis now inspects every `MultiLineString` part instead of only the
+  longest part and reports unnoded crossings and T-junctions.
+
 ## [0.1.0] - 2026-07-26
 
 ### Added

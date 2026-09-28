@@ -2,6 +2,7 @@ from unittest.mock import Mock
 
 from geoqc.application.services.spatial_intelligence import (
     BoundarySnapService,
+    RoadNetworkRepairService,
     RoadNetworkService,
     SmallPolygonService,
 )
@@ -9,6 +10,8 @@ from geoqc.domain.models.spatial_intelligence import (
     BoundarySnapConfig,
     BoundarySnapResult,
     RoadNetworkConfig,
+    RoadNetworkRepairConfig,
+    RoadNetworkRepairResult,
     RoadNetworkReport,
     SmallPolygonConfig,
     SmallPolygonReport,
@@ -35,6 +38,15 @@ def test_road_service_delegates_with_default_config() -> None:
 
     assert RoadNetworkService(engine).analyze([]) is expected
     assert isinstance(engine.analyze.call_args.args[1], RoadNetworkConfig)
+
+
+def test_road_repair_service_delegates_with_default_config() -> None:
+    engine = Mock()
+    expected = RoadNetworkRepairResult(0, 0, 0, ())
+    engine.repair.return_value = expected
+
+    assert RoadNetworkRepairService(engine).repair([]) is expected
+    assert isinstance(engine.repair.call_args.args[1], RoadNetworkRepairConfig)
 
 
 def test_small_polygon_service_delegates_with_default_config() -> None:

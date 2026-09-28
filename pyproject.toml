@@ -55,7 +55,7 @@ dev = [
   "pytest>=9.0.3,<10",
   "pytest-cov>=6.2,<7",
   "ruff>=0.12,<1",
-  "twine>=6.1,<7",
+  "twine>=7,<8",
   "types-shapely>=2.1,<3",
 ]
 

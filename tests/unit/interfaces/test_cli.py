@@ -1,5 +1,6 @@
 """Tests for the Typer composition root."""
 
+import json
 from pathlib import Path
 
 from pytest import MonkeyPatch
@@ -10,6 +11,10 @@ from geoqc.application.parallel import ParallelBatchExecutor
 from geoqc.application.streaming.geometry import GeometryAuditResult
 from geoqc.domain.models import BatchItemResult, BatchItemStatus, BatchResult
 from geoqc.infrastructure.gis.parallel_audit import DatasetAudit
+from geoqc.infrastructure.gis.road_dataset_repair import (
+    RoadDatasetRepairer,
+    RoadDatasetRepairResult,
+)
 from geoqc.interfaces.cli.main import app
 
 runner = CliRunner()
@@ -75,3 +80,49 @@ def test_cli_rejects_unknown_options() -> None:
 
     assert result.exit_code == 2
     assert "No such option" in result.output
+
+
+def test_repair_roads_command_writes_report(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    source = tmp_path / "roads.shp"
+    output = tmp_path / "repaired.gpkg"
+    report = tmp_path / "report.json"
+    source.touch()
+    summary = RoadDatasetRepairResult(
+        source.resolve(), None, output.resolve(), "network", "EPSG:3857", 3, 3, 1, 5
+    )
+    monkeypatch.setattr(RoadDatasetRepairer, "repair", lambda *_args, **_kwargs: summary)
+
+    result = runner.invoke(
+        app,
+        [
+            "repair-roads",
+            str(source),
+            str(output),
+            "--output-layer",
+            "network",
+            "--snap-tolerance",
+            "0.1",
+            "--report",
+            str(report),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "snapped=1 segments=5" in result.stdout
+    assert json.loads(report.read_text(encoding="utf-8"))["output_segment_count"] == 5
+
+
+def test_repair_roads_command_reports_safe_error(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    def fail(*_args: object, **_kwargs: object) -> RoadDatasetRepairResult:
+        raise ValueError("bad road data")
+
+    monkeypatch.setattr(RoadDatasetRepairer, "repair", fail)
+
+    result = runner.invoke(app, ["repair-roads", "in.shp", str(tmp_path / "out.gpkg")])
+
+    assert result.exit_code == 2
+    assert "Error: bad road data" in result.stderr

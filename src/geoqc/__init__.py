@@ -31,7 +31,10 @@ from geoqc.domain.models.spatial_intelligence import (
     BoundarySnapConfig,
     BoundarySnapResult,
     RoadNetworkConfig,
+    RoadNetworkRepairConfig,
+    RoadNetworkRepairResult,
     RoadNetworkReport,
+    RoadRepairSegment,
     SmallPolygonConfig,
     SmallPolygonReport,
 )
@@ -44,6 +47,7 @@ from geoqc.infrastructure.gis.shapely_geometry_validator import ShapelyGeometryV
 from geoqc.infrastructure.gis.shapely_spatial_intelligence import (
     ShapelyBoundarySnapper,
     ShapelyRoadNetworkAnalyzer,
+    ShapelyRoadNetworkRepairer,
     ShapelySmallPolygonAnalyzer,
 )
 from geoqc.infrastructure.gis.shapely_topology_repairer import ShapelyTopologyRepairer
@@ -60,6 +64,9 @@ __all__ = [
     "RepairSession",
     "RoadNetworkConfig",
     "RoadNetworkReport",
+    "RoadNetworkRepairConfig",
+    "RoadNetworkRepairResult",
+    "RoadRepairSegment",
     "SmallPolygonConfig",
     "SmallPolygonReport",
     "ConflictPolicy",
@@ -73,6 +80,7 @@ __all__ = [
     "SpatialDuplicateReport",
     "SpatialLayer",
     "analyze_road_network",
+    "repair_road_network",
     "analyze_small_polygons",
     "analyze_spatial_conflicts",
     "compare_datasets",
@@ -92,6 +100,7 @@ _geometry_validator = ShapelyGeometryValidator()
 _topology_repairer = ShapelyTopologyRepairer(_geometry_validator)
 _boundary_snapper = ShapelyBoundarySnapper()
 _road_analyzer = ShapelyRoadNetworkAnalyzer()
+_road_repairer = ShapelyRoadNetworkRepairer()
 _small_polygon_analyzer = ShapelySmallPolygonAnalyzer()
 _duplicate_detector = ShapelySpatialDuplicateDetector()
 _dataset_comparator = ShapelyDatasetComparator()
@@ -147,6 +156,20 @@ def analyze_road_network(
     return _road_analyzer.analyze(
         [_to_wkt(_require_geometry(item)) for item in geometries],
         config or RoadNetworkConfig(),
+    )
+
+
+def repair_road_network(
+    geometries: Sequence[BaseGeometry], config: RoadNetworkRepairConfig | None = None
+) -> RoadNetworkRepairResult:
+    """Snap small endpoint gaps and return fully noded road segments.
+
+    The source geometries are not mutated. Every output segment contains input
+    feature indices so dataset attributes can be restored by callers.
+    """
+    return _road_repairer.repair(
+        [_to_wkt(_require_geometry(item)) for item in geometries],
+        config or RoadNetworkRepairConfig(),
     )
 
 

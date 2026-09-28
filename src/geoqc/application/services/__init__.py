@@ -4,6 +4,7 @@ from geoqc.application.services.axis_order_detector import AxisOrderDetector
 from geoqc.application.services.batch_processor import BatchProcessor
 from geoqc.application.services.crs_scanner import CrsConsistencyScanner
 from geoqc.application.services.datum_shift_detector import DatumShiftDetector
+from geoqc.application.services.spatial_intelligence import RoadNetworkRepairService
 from geoqc.application.services.topology_repair import RepairSession, UndoEngine
 
 __all__ = [
@@ -12,5 +13,6 @@ __all__ = [
     "CrsConsistencyScanner",
     "DatumShiftDetector",
     "RepairSession",
+    "RoadNetworkRepairService",
     "UndoEngine",
 ]

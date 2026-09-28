@@ -15,6 +15,7 @@ geoqc --help
 | `geoqc --version`             | Print the installed GeoQC version and exit.      | `0`       |
 | `geoqc audit PATH`            | Audit supported datasets under a file or folder. | `0`/`1`   |
 | `geoqc audit PATH --workers N`| Set a safe requested worker upper bound.          | `0`/`1`   |
+| `geoqc repair-roads IN OUT`   | Snap and fully node a road layer into a new GPKG. | `0`/`2`   |
 | `geoqc` (no args)             | Equivalent to `--help`.                          | `0`       |
 | Unknown option                | Reject the invocation with a usage error.         | `2`       |
 
@@ -52,6 +53,26 @@ Use `--workers` and `--chunk-size` to configure the audit; their effective
 values are included in every benchmark record. See the
 [benchmark system guide](benchmark-system.md) for metric semantics, output
 schemas, visualizations, and overhead notes.
+
+### Road-network repair
+
+Repair a projected road dataset without modifying the source:
+
+```bash
+geoqc repair-roads roads.shp repaired.gpkg \
+  --snap-tolerance 0.1 \
+  --output-layer roads_fixed \
+  --report topology-report.json
+```
+
+The default snap tolerance is `0`, so exact intersections are noded without
+moving endpoints. Set a tolerance in CRS units to close small digitizing gaps.
+Inputs may be Shapefile, GeoJSON, FlatGeobuf, or GeoPackage; output is an atomic
+GeoPackage write. Use `--layer NAME` for a multi-layer input GeoPackage and
+`--overwrite` only when replacing an existing output intentionally. The command
+rejects null/empty/non-line geometries, unknown CRS, accidental source overwrite,
+and nonzero snapping in geographic coordinates unless `--allow-geographic` is
+explicitly requested. Use `--max-features` to control the in-memory safety cap.
 
 ## Planned commands
 

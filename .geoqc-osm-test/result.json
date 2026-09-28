@@ -1,0 +1,36 @@
+{
+  "geoqc_version": "0.1.0",
+  "geoqc_loaded_from": "C:\\Users\\ACER\\Downloads\\Jobs\\Portofolio\\GeoQC\\.geoqc-pypi-test\\Lib\\site-packages\\geoqc\\__init__.py",
+  "feature_count": 30,
+  "initial_invalid_features": 2,
+  "initial_issue_count": 3,
+  "initial_issues": [
+    {
+      "row": 0,
+      "osm_id": 28717125,
+      "issues": [
+        "invalid_geometry",
+        "self_intersection"
+      ]
+    },
+    {
+      "row": 1,
+      "osm_id": 121716538,
+      "issues": [
+        "duplicate_vertex"
+      ]
+    }
+  ],
+  "repair_status_counts": {
+    "repaired": 2,
+    "unchanged": 28,
+    "failed": 0
+  },
+  "repair_action_counts": {
+    "duplicate_vertex": 1,
+    "self_intersection": 1
+  },
+  "post_repair_invalid_features": 0,
+  "post_repair_issue_count": 0,
+  "all_output_geometries_shapely_valid": true
+}

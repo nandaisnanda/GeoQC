@@ -1,7 +1,9 @@
 """Typer composition root for the GeoQC command-line interface."""
 
+import json
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
 import typer
 
@@ -10,11 +12,13 @@ from geoqc.application.benchmarking import BenchmarkReport
 from geoqc.application.parallel import ParallelBatchExecutor
 from geoqc.application.parallel.scheduler import TaskScheduler
 from geoqc.application.services import BatchProcessor
+from geoqc.domain.models.spatial_intelligence import RoadNetworkRepairConfig
 from geoqc.infrastructure.gis.parallel_audit import (
     DatasetAudit,
     DatasetAuditWorker,
     audit_dataset,
 )
+from geoqc.infrastructure.gis.road_dataset_repair import RoadDatasetRepairer
 from geoqc.infrastructure.reporting import BenchmarkFormat, write_benchmark_report
 from geoqc.interfaces.cli.progress import ParallelConsoleProgress
 
@@ -123,6 +127,92 @@ def audit(
         typer.echo(f"Benchmark report: {benchmark_output}")
     if not result.is_successful:
         raise typer.Exit(code=1)
+
+
+@app.command("repair-roads")
+def repair_roads(
+    source: Annotated[Path, typer.Argument(help="Input road vector dataset.")],
+    output: Annotated[Path, typer.Argument(help="New output GeoPackage path.")],
+    layer: Annotated[
+        str | None,
+        typer.Option(help="Input layer name; required for multi-layer GeoPackages."),
+    ] = None,
+    output_layer: Annotated[
+        str,
+        typer.Option(help="Layer name to create in the output GeoPackage."),
+    ] = "repaired_roads",
+    snap_tolerance: Annotated[
+        float,
+        typer.Option(min=0, help="Maximum endpoint snap distance in CRS units."),
+    ] = 0.0,
+    minimum_segment_length: Annotated[
+        float,
+        typer.Option(min=1e-15, help="Discard noded segments shorter than this value."),
+    ] = 1e-9,
+    report: Annotated[
+        Path | None,
+        typer.Option(help="Optional JSON summary path."),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing output GeoPackage."),
+    ] = False,
+    allow_geographic: Annotated[
+        bool,
+        typer.Option(
+            "--allow-geographic",
+            help="Allow a nonzero snap tolerance in geographic CRS degrees.",
+        ),
+    ] = False,
+    max_features: Annotated[
+        int,
+        typer.Option(min=1, help="In-memory safety limit for input features."),
+    ] = 500_000,
+) -> None:
+    """Snap endpoint gaps and fully node a road network without changing the source."""
+    try:
+        config = RoadNetworkRepairConfig(
+            snap_tolerance=snap_tolerance,
+            minimum_segment_length=minimum_segment_length,
+        )
+        result = RoadDatasetRepairer().repair(
+            source,
+            output,
+            config,
+            layer=layer,
+            output_layer=output_layer,
+            overwrite=overwrite,
+            allow_geographic=allow_geographic,
+            max_features=max_features,
+        )
+        if report is not None:
+            _write_json_report(report, result.to_dict(), protected={source, output})
+    except (FileNotFoundError, OSError, TypeError, ValueError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    typer.echo(
+        f"Repair complete: input={result.input_feature_count} "
+        f"parts={result.input_part_count} snapped={result.snapped_endpoint_count} "
+        f"segments={result.output_segment_count}"
+    )
+    typer.echo(f"Output: {result.output} layer={result.output_layer}")
+    if report is not None:
+        typer.echo(f"Report: {report.resolve()}")
+
+
+def _write_json_report(path: Path, payload: dict[str, object], *, protected: set[Path]) -> None:
+    destination = path.resolve()
+    if destination in {item.resolve() for item in protected}:
+        raise ValueError("Report path must differ from input and output dataset paths.")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temporary.replace(destination)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def run() -> None:

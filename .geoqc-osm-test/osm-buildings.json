@@ -1,0 +1,1069 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-05-31T22:37:44Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "way",
+  "id": 28717125,
+  "bounds": {
+    "minlat": -6.1753760,
+    "minlon": 106.8221093,
+    "maxlat": -6.1747468,
+    "maxlon": 106.8224199
+  },
+  "nodes": [
+    315732393,
+    315732394,
+    315732395,
+    315732396,
+    6144782604,
+    6144782603,
+    315732393
+  ],
+  "geometry": [
+    { "lat": -6.1747468, "lon": 106.8221202 },
+    { "lat": -6.1747520, "lon": 106.8224199 },
+    { "lat": -6.1753760, "lon": 106.8224090 },
+    { "lat": -6.1753708, "lon": 106.8221093 },
+    { "lat": -6.1748688, "lon": 106.8221180 },
+    { "lat": -6.1747677, "lon": 106.8221198 },
+    { "lat": -6.1747468, "lon": 106.8221202 }
+  ],
+  "tags": {
+    "addr:city": "DKI Jakarta",
+    "addr:full": "Jalan Medan Merdeka Barat",
+    "backup_generator": "yes",
+    "building": "government_office",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "7",
+    "building:roof": "concrete",
+    "building:structure": "confined_masonry",
+    "building:walls": "glass",
+    "capacity:persons": ">500",
+    "source": "HOT_InAWARESurvey_2017"
+  }
+},
+{
+  "type": "way",
+  "id": 121716538,
+  "bounds": {
+    "minlat": -6.1740348,
+    "minlon": 106.8217010,
+    "maxlat": -6.1737619,
+    "maxlon": 106.8220060
+  },
+  "nodes": [
+    1361569525,
+    1361569589,
+    4885064973,
+    4885065139,
+    1361569139,
+    1361569538,
+    1361569525
+  ],
+  "geometry": [
+    { "lat": -6.1737619, "lon": 106.8217116 },
+    { "lat": -6.1737741, "lon": 106.8220060 },
+    { "lat": -6.1737985, "lon": 106.8220056 },
+    { "lat": -6.1739981, "lon": 106.8220028 },
+    { "lat": -6.1740348, "lon": 106.8220022 },
+    { "lat": -6.1740285, "lon": 106.8217010 },
+    { "lat": -6.1737619, "lon": 106.8217116 }
+  ],
+  "tags": {
+    "access:roof": "yes",
+    "addr:city": "DKI Jakarta",
+    "addr:full": "Jalan Abdul Muis",
+    "addr:housenumber": "7",
+    "addr:postcode": "10110",
+    "addr:street": "Jalan Abdul Muis",
+    "backup_generator": "yes",
+    "building": "government_office",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "11",
+    "building:roof": "concrete",
+    "building:structure": "confined_masonry",
+    "building:walls": "concrete",
+    "capacity:persons": ">500",
+    "government": "administrative",
+    "name": "Kementerian Desa Pembangunan Tertinggal dan Transmigrasi",
+    "name:en": "Kementerian Desa Pembangunan Tertinggal dan Transmigrasi",
+    "office": "government",
+    "opening_hours": "Mo-Fr 08:00-17:00",
+    "source": "HOT_InAWARESurvey_2017",
+    "website": "https://www.kemendesa.go.id"
+  }
+},
+{
+  "type": "way",
+  "id": 121716561,
+  "bounds": {
+    "minlat": -6.1753098,
+    "minlon": 106.8197739,
+    "maxlat": -6.1748344,
+    "maxlon": 106.8204446
+  },
+  "nodes": [
+    1361569222,
+    1361569285,
+    1361569371,
+    1361569245,
+    1361569222
+  ],
+  "geometry": [
+    { "lat": -6.1748344, "lon": 106.8198814 },
+    { "lat": -6.1751426, "lon": 106.8204446 },
+    { "lat": -6.1753098, "lon": 106.8203971 },
+    { "lat": -6.1751072, "lon": 106.8197739 },
+    { "lat": -6.1748344, "lon": 106.8198814 }
+  ],
+  "tags": {
+    "building": "yes",
+    "building:levels": "12",
+    "building:roof": "concrete",
+    "building:structure": "confined_masonry",
+    "building:use": "commercial",
+    "building:walls": "brick",
+    "name": "Wisma BSG"
+  }
+},
+{
+  "type": "way",
+  "id": 155110864,
+  "bounds": {
+    "minlat": -6.1754760,
+    "minlon": 106.8201232,
+    "maxlat": -6.1753153,
+    "maxlon": 106.8203850
+  },
+  "nodes": [
+    1675461604,
+    1675461602,
+    1675461601,
+    1675461603,
+    1675461604
+  ],
+  "geometry": [
+    { "lat": -6.1754760, "lon": 106.8203619 },
+    { "lat": -6.1753639, "lon": 106.8203850 },
+    { "lat": -6.1753153, "lon": 106.8201463 },
+    { "lat": -6.1754274, "lon": 106.8201232 },
+    { "lat": -6.1754760, "lon": 106.8203619 }
+  ],
+  "tags": {
+    "access:roof": "yes",
+    "addr:full": "JALAN TANAH ABANG 52 PETOJO SELATAN",
+    "building": "yes",
+    "building:levels": "2",
+    "building:roof": "tile",
+    "building:structure": "reinforced_masonry",
+    "building:use": "industrial",
+    "building:walls": "brick",
+    "name": "PT Indolexco"
+  }
+},
+{
+  "type": "way",
+  "id": 380212251,
+  "bounds": {
+    "minlat": -6.1746929,
+    "minlon": 106.8204335,
+    "maxlat": -6.1743820,
+    "maxlon": 106.8208325
+  },
+  "nodes": [
+    3835546954,
+    3835546955,
+    3835546956,
+    3835547157,
+    3835546954
+  ],
+  "geometry": [
+    { "lat": -6.1743820, "lon": 106.8205152 },
+    { "lat": -6.1745198, "lon": 106.8208325 },
+    { "lat": -6.1746929, "lon": 106.8207601 },
+    { "lat": -6.1745581, "lon": 106.8204335 },
+    { "lat": -6.1743820, "lon": 106.8205152 }
+  ],
+  "tags": {
+    "amenity": "cafe",
+    "building": "yes",
+    "internet_access": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 431918191,
+  "bounds": {
+    "minlat": -6.1744837,
+    "minlon": 106.8206060,
+    "maxlat": -6.1742550,
+    "maxlon": 106.8208829
+  },
+  "nodes": [
+    4311503106,
+    4311503107,
+    4311503108,
+    4311503109,
+    4311503106
+  ],
+  "geometry": [
+    { "lat": -6.1742550, "lon": 106.8206602 },
+    { "lat": -6.1743358, "lon": 106.8208829 },
+    { "lat": -6.1744837, "lon": 106.8208287 },
+    { "lat": -6.1744029, "lon": 106.8206060 },
+    { "lat": -6.1742550, "lon": 106.8206602 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 431945287,
+  "bounds": {
+    "minlat": -6.1741599,
+    "minlon": 106.8204869,
+    "maxlat": -6.1739050,
+    "maxlon": 106.8206891
+  },
+  "nodes": [
+    4311645140,
+    4311645141,
+    4311645142,
+    4311645143,
+    4311645140
+  ],
+  "geometry": [
+    { "lat": -6.1739050, "lon": 106.8205708 },
+    { "lat": -6.1739522, "lon": 106.8206891 },
+    { "lat": -6.1741599, "lon": 106.8206052 },
+    { "lat": -6.1741127, "lon": 106.8204869 },
+    { "lat": -6.1739050, "lon": 106.8205708 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 432041736,
+  "bounds": {
+    "minlat": -6.1740314,
+    "minlon": 106.8202834,
+    "maxlat": -6.1739447,
+    "maxlon": 106.8204785
+  },
+  "nodes": [
+    4312120975,
+    4312120976,
+    4312120977,
+    4312120978,
+    4312120979,
+    4312120980,
+    4312120975
+  ],
+  "geometry": [
+    { "lat": -6.1739956, "lon": 106.8204785 },
+    { "lat": -6.1739447, "lon": 106.8203025 },
+    { "lat": -6.1740098, "lon": 106.8202834 },
+    { "lat": -6.1740277, "lon": 106.8203452 },
+    { "lat": -6.1739984, "lon": 106.8203538 },
+    { "lat": -6.1740314, "lon": 106.8204680 },
+    { "lat": -6.1739956, "lon": 106.8204785 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 432056119,
+  "bounds": {
+    "minlat": -6.1748120,
+    "minlon": 106.8196328,
+    "maxlat": -6.1745914,
+    "maxlon": 106.8201083
+  },
+  "nodes": [
+    4312259674,
+    4312259677,
+    4312259678,
+    4312259676,
+    4312259674
+  ],
+  "geometry": [
+    { "lat": -6.1745914, "lon": 106.8196595 },
+    { "lat": -6.1747195, "lon": 106.8201083 },
+    { "lat": -6.1748120, "lon": 106.8200817 },
+    { "lat": -6.1746838, "lon": 106.8196328 },
+    { "lat": -6.1745914, "lon": 106.8196595 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 432056120,
+  "bounds": {
+    "minlat": -6.1746739,
+    "minlon": 106.8196549,
+    "maxlat": -6.1744320,
+    "maxlon": 106.8201573
+  },
+  "nodes": [
+    4312259671,
+    4312259673,
+    4312259675,
+    4312259672,
+    4312259671
+  ],
+  "geometry": [
+    { "lat": -6.1744320, "lon": 106.8196857 },
+    { "lat": -6.1745694, "lon": 106.8201573 },
+    { "lat": -6.1746739, "lon": 106.8201266 },
+    { "lat": -6.1745365, "lon": 106.8196549 },
+    { "lat": -6.1744320, "lon": 106.8196857 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496643325,
+  "bounds": {
+    "minlat": -6.1740084,
+    "minlon": 106.8205860,
+    "maxlat": -6.1736860,
+    "maxlon": 106.8210400
+  },
+  "nodes": [
+    4883234586,
+    4883234590,
+    4883234597,
+    4883234592,
+    4883234586
+  ],
+  "geometry": [
+    { "lat": -6.1736860, "lon": 106.8206528 },
+    { "lat": -6.1738268, "lon": 106.8210400 },
+    { "lat": -6.1740084, "lon": 106.8209732 },
+    { "lat": -6.1738676, "lon": 106.8205860 },
+    { "lat": -6.1736860, "lon": 106.8206528 }
+  ],
+  "tags": {
+    "addr:city": "DKI Jakarta",
+    "addr:full": "Jalan Abdul Muis",
+    "amenity": "bank",
+    "brand": "Rabobank",
+    "brand:wikidata": "Q252004",
+    "brand:wikipedia": "en:Rabobank",
+    "building": "bank",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "5",
+    "building:roof": "concrete",
+    "building:structure": "confined_masonry",
+    "building:walls": "glass",
+    "capacity:persons": "250-500",
+    "name": "Rabobank",
+    "source": "HOT_InAWARESurvey_2017"
+  }
+},
+{
+  "type": "way",
+  "id": 496643329,
+  "bounds": {
+    "minlat": -6.1756142,
+    "minlon": 106.8200136,
+    "maxlat": -6.1754476,
+    "maxlon": 106.8202362
+  },
+  "nodes": [
+    4883234616,
+    4883234721,
+    4883234620,
+    4883234618,
+    4883234619,
+    4883234614,
+    4883234616
+  ],
+  "geometry": [
+    { "lat": -6.1754476, "lon": 106.8200212 },
+    { "lat": -6.1754747, "lon": 106.8202362 },
+    { "lat": -6.1756142, "lon": 106.8202184 },
+    { "lat": -6.1756016, "lon": 106.8201187 },
+    { "lat": -6.1755218, "lon": 106.8201289 },
+    { "lat": -6.1755072, "lon": 106.8200136 },
+    { "lat": -6.1754476, "lon": 106.8200212 }
+  ],
+  "tags": {
+    "addr:city": "DKI Jakarta",
+    "addr:full": "Jalan Abdul Muis No.44",
+    "building": "school",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "1",
+    "building:roof": "tile",
+    "building:structure": "confined_masonry",
+    "building:walls": "brick",
+    "capacity:persons": "100-250",
+    "operator:type": "government",
+    "source": "HOT_InAWARESurvey_2017"
+  }
+},
+{
+  "type": "way",
+  "id": 496804895,
+  "bounds": {
+    "minlat": -6.1741392,
+    "minlon": 106.8201213,
+    "maxlat": -6.1739938,
+    "maxlon": 106.8202369
+  },
+  "nodes": [
+    4884725585,
+    4884725586,
+    4884725587,
+    4884725588,
+    4884725595,
+    4884725594,
+    4884725596,
+    4884725593,
+    4884725585
+  ],
+  "geometry": [
+    { "lat": -6.1739938, "lon": 106.8201603 },
+    { "lat": -6.1740132, "lon": 106.8202236 },
+    { "lat": -6.1740639, "lon": 106.8202078 },
+    { "lat": -6.1740728, "lon": 106.8202369 },
+    { "lat": -6.1741358, "lon": 106.8202173 },
+    { "lat": -6.1741269, "lon": 106.8201883 },
+    { "lat": -6.1741392, "lon": 106.8201845 },
+    { "lat": -6.1741198, "lon": 106.8201213 },
+    { "lat": -6.1739938, "lon": 106.8201603 }
+  ],
+  "tags": {
+    "addr:city": "DKI Jakarta",
+    "addr:full": "Jalan Kebon Jahe Kober III",
+    "amenity": "place_of_worship",
+    "building": "mosque",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "1",
+    "building:roof": "concrete",
+    "building:structure": "confined_masonry",
+    "capacity:persons": "50-100",
+    "name": "Masjid Manarul Islam",
+    "religion": "muslim",
+    "source": "HOT_InAWARESurvey_2017"
+  }
+},
+{
+  "type": "way",
+  "id": 496804896,
+  "bounds": {
+    "minlat": -6.1741195,
+    "minlon": 106.8199842,
+    "maxlat": -6.1739632,
+    "maxlon": 106.8201383
+  },
+  "nodes": [
+    4884725583,
+    4884725584,
+    4884725592,
+    4884725589,
+    4884725583
+  ],
+  "geometry": [
+    { "lat": -6.1739632, "lon": 106.8200185 },
+    { "lat": -6.1739961, "lon": 106.8201383 },
+    { "lat": -6.1741195, "lon": 106.8201041 },
+    { "lat": -6.1740866, "lon": 106.8199842 },
+    { "lat": -6.1739632, "lon": 106.8200185 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496811357,
+  "bounds": {
+    "minlat": -6.1756556,
+    "minlon": 106.8200203,
+    "maxlat": -6.1755253,
+    "maxlon": 106.8201964
+  },
+  "nodes": [
+    4884789974,
+    4884789975,
+    4884789979,
+    4884789981,
+    4884789984,
+    4884789983,
+    4884789974
+  ],
+  "geometry": [
+    { "lat": -6.1755253, "lon": 106.8200347 },
+    { "lat": -6.1755365, "lon": 106.8201194 },
+    { "lat": -6.1756065, "lon": 106.8201101 },
+    { "lat": -6.1756178, "lon": 106.8201964 },
+    { "lat": -6.1756556, "lon": 106.8201914 },
+    { "lat": -6.1756330, "lon": 106.8200203 },
+    { "lat": -6.1755253, "lon": 106.8200347 }
+  ],
+  "tags": {
+    "access:roof": "no",
+    "addr:city": "DKI Jakarta",
+    "addr:full": "Jalan Abdul Muis No. 44",
+    "amenity": "place_of_worship",
+    "backup_generator": "no",
+    "building": "mosque",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "2",
+    "building:roof": "tile",
+    "building:structure": "confined_masonry",
+    "building:walls": "brick",
+    "capacity:persons": "100-250",
+    "name": "Masjid Baitul Ilmi",
+    "religion": "muslim",
+    "source": "HOT_InAWARESurvey_2017"
+  }
+},
+{
+  "type": "way",
+  "id": 496811360,
+  "bounds": {
+    "minlat": -6.1756222,
+    "minlon": 106.8198168,
+    "maxlat": -6.1754251,
+    "maxlon": 106.8200195
+  },
+  "nodes": [
+    4884789969,
+    4884789970,
+    4884789972,
+    4884789973,
+    4884789982,
+    4884789978,
+    4884789969
+  ],
+  "geometry": [
+    { "lat": -6.1754251, "lon": 106.8198398 },
+    { "lat": -6.1754464, "lon": 106.8200009 },
+    { "lat": -6.1755174, "lon": 106.8199914 },
+    { "lat": -6.1755211, "lon": 106.8200195 },
+    { "lat": -6.1756222, "lon": 106.8200060 },
+    { "lat": -6.1755972, "lon": 106.8198168 },
+    { "lat": -6.1754251, "lon": 106.8198398 }
+  ],
+  "tags": {
+    "addr:city": "DKI Jakarta",
+    "addr:full": "Jalan Abdul Muis No.44",
+    "building": "school",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "3",
+    "building:roof": "concrete",
+    "building:structure": "confined_masonry",
+    "building:walls": "brick",
+    "capacity:persons": "250-500",
+    "operator:type": "government",
+    "source": "HOT_InAWARESurvey_2017"
+  }
+},
+{
+  "type": "way",
+  "id": 496828066,
+  "bounds": {
+    "minlat": -6.1760847,
+    "minlon": 106.8198354,
+    "maxlat": -6.1758725,
+    "maxlon": 106.8200996
+  },
+  "nodes": [
+    4884948821,
+    4884948813,
+    4884948823,
+    4884948836,
+    4884948834,
+    4884948839,
+    4884948838,
+    4884948840,
+    4884948833,
+    4884948828,
+    4884948821
+  ],
+  "geometry": [
+    { "lat": -6.1759735, "lon": 106.8198354 },
+    { "lat": -6.1758725, "lon": 106.8198876 },
+    { "lat": -6.1759810, "lon": 106.8200996 },
+    { "lat": -6.1760437, "lon": 106.8200671 },
+    { "lat": -6.1760354, "lon": 106.8200509 },
+    { "lat": -6.1760740, "lon": 106.8200310 },
+    { "lat": -6.1760688, "lon": 106.8200208 },
+    { "lat": -6.1760847, "lon": 106.8200126 },
+    { "lat": -6.1760344, "lon": 106.8199142 },
+    { "lat": -6.1760181, "lon": 106.8199226 },
+    { "lat": -6.1759735, "lon": 106.8198354 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496828092,
+  "bounds": {
+    "minlat": -6.1742523,
+    "minlon": 106.8199790,
+    "maxlat": -6.1741103,
+    "maxlon": 106.8200999
+  },
+  "nodes": [
+    4884948573,
+    4884948578,
+    4884948616,
+    4884948608,
+    4884948573
+  ],
+  "geometry": [
+    { "lat": -6.1741103, "lon": 106.8200150 },
+    { "lat": -6.1741364, "lon": 106.8200999 },
+    { "lat": -6.1742523, "lon": 106.8200639 },
+    { "lat": -6.1742263, "lon": 106.8199790 },
+    { "lat": -6.1741103, "lon": 106.8200150 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496828161,
+  "bounds": {
+    "minlat": -6.1743303,
+    "minlon": 106.8199631,
+    "maxlat": -6.1742357,
+    "maxlon": 106.8200649
+  },
+  "nodes": [
+    4884948613,
+    4884948618,
+    4884948632,
+    4884948625,
+    4884948613
+  ],
+  "geometry": [
+    { "lat": -6.1742357, "lon": 106.8199848 },
+    { "lat": -6.1742602, "lon": 106.8200649 },
+    { "lat": -6.1743303, "lon": 106.8200431 },
+    { "lat": -6.1743058, "lon": 106.8199631 },
+    { "lat": -6.1742357, "lon": 106.8199848 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496843541,
+  "bounds": {
+    "minlat": -6.1742464,
+    "minlon": 106.8207272,
+    "maxlat": -6.1740511,
+    "maxlon": 106.8210077
+  },
+  "nodes": [
+    4885065142,
+    4885065143,
+    4885065138,
+    4885065151,
+    4885065169,
+    4885065165,
+    4885065167,
+    4885065164,
+    4885065157,
+    4885065154,
+    4885065142
+  ],
+  "geometry": [
+    { "lat": -6.1740812, "lon": 106.8207561 },
+    { "lat": -6.1740864, "lon": 106.8207703 },
+    { "lat": -6.1740511, "lon": 106.8207835 },
+    { "lat": -6.1741339, "lon": 106.8210077 },
+    { "lat": -6.1742464, "lon": 106.8209657 },
+    { "lat": -6.1741996, "lon": 106.8208387 },
+    { "lat": -6.1742341, "lon": 106.8208258 },
+    { "lat": -6.1741981, "lon": 106.8207285 },
+    { "lat": -6.1741636, "lon": 106.8207414 },
+    { "lat": -6.1741584, "lon": 106.8207272 },
+    { "lat": -6.1740812, "lon": 106.8207561 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496843542,
+  "bounds": {
+    "minlat": -6.1740528,
+    "minlon": 106.8220028,
+    "maxlat": -6.1737585,
+    "maxlon": 106.8224680
+  },
+  "nodes": [
+    4885064984,
+    4885064986,
+    4885065133,
+    4885065132,
+    4885065148,
+    4885065147,
+    4885065140,
+    4885065139,
+    4885064973,
+    4885064975,
+    4885064953,
+    4885064961,
+    4885064984
+  ],
+  "geometry": [
+    { "lat": -6.1738139, "lon": 106.8223900 },
+    { "lat": -6.1738170, "lon": 106.8224680 },
+    { "lat": -6.1739542, "lon": 106.8224625 },
+    { "lat": -6.1739512, "lon": 106.8223845 },
+    { "lat": -6.1740528, "lon": 106.8223805 },
+    { "lat": -6.1740410, "lon": 106.8220804 },
+    { "lat": -6.1739998, "lon": 106.8220820 },
+    { "lat": -6.1739981, "lon": 106.8220028 },
+    { "lat": -6.1737985, "lon": 106.8220056 },
+    { "lat": -6.1738019, "lon": 106.8220899 },
+    { "lat": -6.1737585, "lon": 106.8220917 },
+    { "lat": -6.1737704, "lon": 106.8223918 },
+    { "lat": -6.1738139, "lon": 106.8223900 }
+  ],
+  "tags": {
+    "access:roof": "yes",
+    "addr:city": "DKI Jakarta",
+    "addr:full": "Jalan Medan Merdeka Barat No 7",
+    "backup_generator": "yes",
+    "building": "government_office",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "16",
+    "building:roof": "tile",
+    "building:structure": "confined_masonry",
+    "building:walls": "concrete",
+    "capacity:persons": ">500",
+    "name": "Kementerian Koordinator Bidang Perekonomian",
+    "office": "government",
+    "source": "HOT_InAWARESurvey_2017"
+  }
+},
+{
+  "type": "way",
+  "id": 496843543,
+  "bounds": {
+    "minlat": -6.1751315,
+    "minlon": 106.8215936,
+    "maxlat": -6.1748944,
+    "maxlon": 106.8217773
+  },
+  "nodes": [
+    4885065183,
+    4885065184,
+    4885065189,
+    4885065188,
+    4885065192,
+    4885065190,
+    4885065193,
+    4885065191,
+    4885065187,
+    4885065186,
+    4885065179,
+    4885065180,
+    4885065177,
+    4885065178,
+    4885065181,
+    4885065182,
+    4885065183
+  ],
+  "geometry": [
+    { "lat": -6.1750047, "lon": 106.8217574 },
+    { "lat": -6.1750144, "lon": 106.8217773 },
+    { "lat": -6.1750880, "lon": 106.8217411 },
+    { "lat": -6.1750783, "lon": 106.8217212 },
+    { "lat": -6.1751026, "lon": 106.8217092 },
+    { "lat": -6.1750927, "lon": 106.8216888 },
+    { "lat": -6.1751315, "lon": 106.8216696 },
+    { "lat": -6.1751024, "lon": 106.8216097 },
+    { "lat": -6.1750635, "lon": 106.8216288 },
+    { "lat": -6.1750464, "lon": 106.8215936 },
+    { "lat": -6.1749210, "lon": 106.8216553 },
+    { "lat": -6.1749364, "lon": 106.8216869 },
+    { "lat": -6.1748944, "lon": 106.8217076 },
+    { "lat": -6.1749189, "lon": 106.8217581 },
+    { "lat": -6.1749610, "lon": 106.8217374 },
+    { "lat": -6.1749773, "lon": 106.8217709 },
+    { "lat": -6.1750047, "lon": 106.8217574 }
+  ],
+  "tags": {
+    "addr:city": "DKI Jakarta",
+    "addr:full": "Jalan Medan Merdeka Barat",
+    "backup_generator": "yes",
+    "building": "government_office",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "3",
+    "building:roof": "concrete",
+    "building:structure": "confined_masonry",
+    "building:walls": "glass",
+    "capacity:persons": "100-250",
+    "source": "HOT_InAWARESurvey_2017"
+  }
+},
+{
+  "type": "way",
+  "id": 496843545,
+  "bounds": {
+    "minlat": -6.1741743,
+    "minlon": 106.8202397,
+    "maxlat": -6.1740950,
+    "maxlon": 106.8203326
+  },
+  "nodes": [
+    4885065156,
+    4885065163,
+    4885065168,
+    4885065166,
+    4885065156
+  ],
+  "geometry": [
+    { "lat": -6.1740950, "lon": 106.8202580 },
+    { "lat": -6.1741196, "lon": 106.8203326 },
+    { "lat": -6.1741743, "lon": 106.8203143 },
+    { "lat": -6.1741498, "lon": 106.8202397 },
+    { "lat": -6.1740950, "lon": 106.8202580 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496843555,
+  "bounds": {
+    "minlat": -6.1750764,
+    "minlon": 106.8201599,
+    "maxlat": -6.1745797,
+    "maxlon": 106.8207104
+  },
+  "nodes": [
+    4885065176,
+    4885065174,
+    4885065175,
+    4885065185,
+    4885065176
+  ],
+  "geometry": [
+    { "lat": -6.1748757, "lon": 106.8201599 },
+    { "lat": -6.1745797, "lon": 106.8203101 },
+    { "lat": -6.1747804, "lon": 106.8207104 },
+    { "lat": -6.1750764, "lon": 106.8205602 },
+    { "lat": -6.1748757, "lon": 106.8201599 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496843558,
+  "bounds": {
+    "minlat": -6.1740190,
+    "minlon": 106.8202108,
+    "maxlat": -6.1739043,
+    "maxlon": 106.8202991
+  },
+  "nodes": [
+    4885065019,
+    4885065126,
+    4885065144,
+    4885065141,
+    4885065019
+  ],
+  "geometry": [
+    { "lat": -6.1739043, "lon": 106.8202429 },
+    { "lat": -6.1739229, "lon": 106.8202991 },
+    { "lat": -6.1740190, "lon": 106.8202670 },
+    { "lat": -6.1740005, "lon": 106.8202108 },
+    { "lat": -6.1739043, "lon": 106.8202429 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496843567,
+  "bounds": {
+    "minlat": -6.1742037,
+    "minlon": 106.8203248,
+    "maxlat": -6.1740943,
+    "maxlon": 106.8204152
+  },
+  "nodes": [
+    4885065155,
+    4885065161,
+    4885065172,
+    4885065170,
+    4885065155
+  ],
+  "geometry": [
+    { "lat": -6.1740943, "lon": 106.8203545 },
+    { "lat": -6.1741143, "lon": 106.8204152 },
+    { "lat": -6.1742037, "lon": 106.8203854 },
+    { "lat": -6.1741837, "lon": 106.8203248 },
+    { "lat": -6.1740943, "lon": 106.8203545 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496843593,
+  "bounds": {
+    "minlat": -6.1741097,
+    "minlon": 106.8203526,
+    "maxlat": -6.1740297,
+    "maxlon": 106.8204490
+  },
+  "nodes": [
+    4885065146,
+    4885065150,
+    4885065159,
+    4885065152,
+    4885065146
+  ],
+  "geometry": [
+    { "lat": -6.1740297, "lon": 106.8203706 },
+    { "lat": -6.1740555, "lon": 106.8204490 },
+    { "lat": -6.1741097, "lon": 106.8204310 },
+    { "lat": -6.1740838, "lon": 106.8203526 },
+    { "lat": -6.1740297, "lon": 106.8203706 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496843598,
+  "bounds": {
+    "minlat": -6.1742453,
+    "minlon": 106.8204179,
+    "maxlat": -6.1741293,
+    "maxlon": 106.8205039
+  },
+  "nodes": [
+    4885065158,
+    4885065162,
+    4885065173,
+    4885065171,
+    4885065158
+  ],
+  "geometry": [
+    { "lat": -6.1741293, "lon": 106.8204572 },
+    { "lat": -6.1741479, "lon": 106.8205039 },
+    { "lat": -6.1742453, "lon": 106.8204645 },
+    { "lat": -6.1742267, "lon": 106.8204179 },
+    { "lat": -6.1741293, "lon": 106.8204572 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 496843622,
+  "bounds": {
+    "minlat": -6.1741130,
+    "minlon": 106.8202617,
+    "maxlat": -6.1740290,
+    "maxlon": 106.8203562
+  },
+  "nodes": [
+    4885065145,
+    4885065149,
+    4885065160,
+    4885065153,
+    4885065145
+  ],
+  "geometry": [
+    { "lat": -6.1740290, "lon": 106.8202815 },
+    { "lat": -6.1740536, "lon": 106.8203562 },
+    { "lat": -6.1741130, "lon": 106.8203364 },
+    { "lat": -6.1740884, "lon": 106.8202617 },
+    { "lat": -6.1740290, "lon": 106.8202815 }
+  ],
+  "tags": {
+    "building": "yes"
+  }
+},
+{
+  "type": "way",
+  "id": 497570501,
+  "bounds": {
+    "minlat": -6.1744879,
+    "minlon": 106.8214664,
+    "maxlat": -6.1741185,
+    "maxlon": 106.8219047
+  },
+  "nodes": [
+    4891131730,
+    4891131725,
+    6146515608,
+    4891131720,
+    4891131719,
+    4891131730
+  ],
+  "geometry": [
+    { "lat": -6.1741185, "lon": 106.8214717 },
+    { "lat": -6.1741248, "lon": 106.8219047 },
+    { "lat": -6.1743300, "lon": 106.8219017 },
+    { "lat": -6.1744879, "lon": 106.8218994 },
+    { "lat": -6.1744816, "lon": 106.8214664 },
+    { "lat": -6.1741185, "lon": 106.8214717 }
+  ],
+  "tags": {
+    "access:roof": "yes",
+    "addr:city": "DKI Jakarta",
+    "backup_generator": "yes",
+    "building": "government_office",
+    "building:condition": "good",
+    "building:floor": "ceramics",
+    "building:levels": "23",
+    "building:roof": "concrete",
+    "building:structure": "confined_masonry",
+    "building:use": "residential",
+    "building:walls": "concrete",
+    "capacity:persons": ">500",
+    "source": "HOT_InAWARESurvey_2017"
+  }
+}
+
+  ]
+}

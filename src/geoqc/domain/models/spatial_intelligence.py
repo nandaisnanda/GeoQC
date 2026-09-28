@@ -62,6 +62,7 @@ class RoadIssueType(StrEnum):
     BROKEN_CONNECTION = "broken_connection"
     DUPLICATE_SEGMENT = "duplicate_segment"
     LOOP_ERROR = "loop_error"
+    UNNODED_INTERSECTION = "unnoded_intersection"
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +121,63 @@ class RoadNetworkReport:
             ],
         }
 
+
+@dataclass(frozen=True, slots=True)
+class RoadNetworkRepairConfig:
+    """Conservative settings for snapping and fully noding linework.
+
+    ``snap_tolerance`` uses the input CRS coordinate unit. A value of zero
+    disables endpoint snapping while intersection noding still runs.
+    """
+
+    snap_tolerance: float = 0.0
+    minimum_segment_length: float = 1e-9
+
+    def __post_init__(self) -> None:
+        _non_negative("snap_tolerance", self.snap_tolerance)
+        if self.minimum_segment_length <= 0:
+            raise ValueError("minimum_segment_length must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class RoadRepairSegment:
+    """One fully noded output segment and its input feature provenance."""
+
+    segment_index: int
+    source_indices: tuple[int, ...]
+    geometry_wkt: str
+    length: float
+
+
+@dataclass(frozen=True, slots=True)
+class RoadNetworkRepairResult:
+    """Repaired road linework with an auditable source-to-segment mapping."""
+
+    input_feature_count: int
+    input_part_count: int
+    snapped_endpoint_count: int
+    segments: tuple[RoadRepairSegment, ...]
+
+    @property
+    def output_segment_count(self) -> int:
+        return len(self.segments)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "input_feature_count": self.input_feature_count,
+            "input_part_count": self.input_part_count,
+            "snapped_endpoint_count": self.snapped_endpoint_count,
+            "output_segment_count": self.output_segment_count,
+            "segments": [
+                {
+                    "segment_index": item.segment_index,
+                    "source_indices": list(item.source_indices),
+                    "geometry_wkt": item.geometry_wkt,
+                    "length": item.length,
+                }
+                for item in self.segments
+            ],
+        }
 
 class SmallPolygonIssueType(StrEnum):
     SLIVER_POLYGON = "sliver_polygon"

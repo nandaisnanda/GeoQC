@@ -1,6 +1,6 @@
 import pytest
 import shapely
-from shapely.geometry import LineString, box
+from shapely.geometry import LineString, MultiLineString, box
 from shapely.geometry.base import BaseGeometry
 
 from geoqc.domain.models.spatial_intelligence import (
@@ -8,16 +8,23 @@ from geoqc.domain.models.spatial_intelligence import (
     Recommendation,
     RoadIssueType,
     RoadNetworkConfig,
+    RoadNetworkRepairConfig,
     SmallPolygonConfig,
     SmallPolygonIssueType,
 )
 from geoqc.infrastructure.gis.shapely_spatial_intelligence import (
     ShapelyBoundarySnapper,
     ShapelyRoadNetworkAnalyzer,
+    ShapelyRoadNetworkRepairer,
     ShapelySmallPolygonAnalyzer,
 )
 
-SpatialEngine = ShapelyBoundarySnapper | ShapelyRoadNetworkAnalyzer | ShapelySmallPolygonAnalyzer
+SpatialEngine = (
+    ShapelyBoundarySnapper
+    | ShapelyRoadNetworkAnalyzer
+    | ShapelyRoadNetworkRepairer
+    | ShapelySmallPolygonAnalyzer
+)
 
 
 def _wkt(geometry: BaseGeometry) -> str:
@@ -61,6 +68,8 @@ def test_road_analyzer_detects_every_requested_issue_and_builds_report() -> None
         LineString([(3, 0), (3.2, 0)]),
         LineString([(3, 0), (3.2, 0)]),
         LineString([(5, 0), (5.1, 0), (5.1, 0.1), (5, 0.1), (5, 0)]),
+        LineString([(7, 0), (9, 0)]),
+        LineString([(8, -1), (8, 1)]),
     ]
 
     report = ShapelyRoadNetworkAnalyzer().analyze(
@@ -77,6 +86,69 @@ def test_road_analyzer_detects_every_requested_issue_and_builds_report() -> None
     assert report.feature_count == len(roads)
     assert report.issue_counts["duplicate_segment"] == 1
     assert report.to_dict()["findings"]
+
+
+def test_road_analyzer_checks_every_multiline_part() -> None:
+    roads = [
+        MultiLineString(
+            [
+                [(0, 0), (10, 0)],
+                [(20, 0), (20.1, 0)],
+            ]
+        )
+    ]
+
+    report = ShapelyRoadNetworkAnalyzer().analyze(
+        [_wkt(item) for item in roads],
+        RoadNetworkConfig(dangling_length_threshold=1),
+    )
+
+    dangling = [item for item in report.findings if item.issue_type is RoadIssueType.DANGLING_ROAD]
+    assert len(dangling) == 2
+    assert all(item.feature_indices == (0,) for item in dangling)
+
+
+def test_road_repair_snaps_gap_nodes_crossing_and_preserves_provenance() -> None:
+    roads = [
+        LineString([(0, 0), (2, 0)]),
+        LineString([(1, -1), (1, 1)]),
+        LineString([(2.05, 0), (3, 0)]),
+    ]
+
+    result = ShapelyRoadNetworkRepairer().repair(
+        [_wkt(item) for item in roads],
+        RoadNetworkRepairConfig(snap_tolerance=0.1),
+    )
+
+    repaired = [shapely.from_wkt(item.geometry_wkt) for item in result.segments]
+    assert result.snapped_endpoint_count == 1
+    assert result.output_segment_count == 5
+    assert all(item.source_indices for item in result.segments)
+    assert all(item.is_simple and item.is_valid for item in repaired)
+    assert shapely.union_all(repaired).length == pytest.approx(5)
+    assert result.to_dict()["output_segment_count"] == 5
+
+
+def test_road_repair_endpoint_cluster_never_exceeds_snap_tolerance() -> None:
+    roads = [
+        LineString([(-2, -2), (0, 0)]),
+        LineString([(0.09, -2), (0.09, 0)]),
+        LineString([(2.18, -2), (0.18, 0)]),
+    ]
+
+    result = ShapelyRoadNetworkRepairer().repair(
+        [_wkt(item) for item in roads], RoadNetworkRepairConfig(snap_tolerance=0.1)
+    )
+    repaired = shapely.union_all(
+        [shapely.from_wkt(item.geometry_wkt) for item in result.segments]
+    )
+
+    assert result.snapped_endpoint_count == 2
+    assert repaired.intersects(shapely.Point(0.09, 0))
+    assert all(
+        shapely.Point(line.coords[-1]).distance(shapely.Point(0.09, 0)) <= 0.1
+        for line in roads
+    )
 
 
 def test_small_polygon_analyzer_classifies_and_previews_recommendations() -> None:
@@ -111,6 +183,7 @@ def test_small_polygon_analyzer_classifies_and_previews_recommendations() -> Non
     [
         (ShapelyBoundarySnapper(), "LINESTRING (0 0, 1 1)"),
         (ShapelyRoadNetworkAnalyzer(), "POLYGON ((0 0, 1 0, 1 1, 0 0))"),
+        (ShapelyRoadNetworkRepairer(), "POLYGON ((0 0, 1 0, 1 1, 0 0))"),
         (ShapelySmallPolygonAnalyzer(), "LINESTRING (0 0, 1 1)"),
     ],
 )
@@ -120,6 +193,8 @@ def test_engines_reject_wrong_geometry_family(engine: SpatialEngine, wkt: str) -
             engine.snap([wkt], BoundarySnapConfig())
         elif isinstance(engine, ShapelyRoadNetworkAnalyzer):
             engine.analyze([wkt], RoadNetworkConfig())
+        elif isinstance(engine, ShapelyRoadNetworkRepairer):
+            engine.repair([wkt], RoadNetworkRepairConfig())
         else:
             assert isinstance(engine, ShapelySmallPolygonAnalyzer)
             engine.analyze([wkt], SmallPolygonConfig())

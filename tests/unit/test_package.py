@@ -2,7 +2,7 @@
 
 import pytest
 from shapely import box, from_wkt
-from shapely.geometry import Polygon
+from shapely.geometry import LineString, Polygon
 
 import geoqc
 
@@ -59,3 +59,19 @@ def test_open_repair_session_rejects_non_geometry() -> None:
     """Session construction validates every input geometry."""
     with pytest.raises(TypeError):
         geoqc.open_repair_session([object()])  # type: ignore[list-item]
+
+
+def test_public_road_repair_returns_noded_segments() -> None:
+    """The public repair API snaps small gaps and nodes line crossings."""
+    roads = [
+        LineString([(0, 0), (2, 0)]),
+        LineString([(1, -1), (1, 1)]),
+        LineString([(2.05, 0), (3, 0)]),
+    ]
+
+    result = geoqc.repair_road_network(
+        roads, geoqc.RoadNetworkRepairConfig(snap_tolerance=0.1)
+    )
+
+    assert result.snapped_endpoint_count == 1
+    assert result.output_segment_count == 5
