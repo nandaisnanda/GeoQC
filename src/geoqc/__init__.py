@@ -8,12 +8,34 @@ from shapely.geometry.base import BaseGeometry
 from geoqc.application.services.repair_recommendation import RepairRecommendationEngine
 from geoqc.application.services.topology_repair import RepairSession
 from geoqc.domain.models import (
+    AttributeRule,
+    AttributeRuleType,
+    CategoryScore,
     CoverageRepairResult,
+    CrsGuardResult,
+    CrsUnitStatus,
+    DatasetAuditResult,
+    DatasetIssue,
+    DatasetLayer,
     GeometryIssueType,
     GeometryRepairResult,
     GeometryValidationIssue,
     GeometryValidationResult,
+    IssueGeometryKind,
+    QualityGatePolicy,
+    QualityPreset,
+    QualityProfile,
     RepairConfig,
+    RepairIssueType,
+    RepairPlan,
+    RepairPlanAction,
+    RepairPlanConflict,
+    RepairRisk,
+    ScoreDeduction,
+    ScoringPolicy,
+    TopologyRule,
+    TopologyRuleType,
+    WorkflowArtifacts,
 )
 from geoqc.domain.models.enterprise_spatial import (
     ConflictPolicy,
@@ -27,6 +49,7 @@ from geoqc.domain.models.enterprise_spatial import (
     SpatialDuplicateReport,
     SpatialLayer,
 )
+from geoqc.domain.models.quality_report import QualityReport, QualityReportIssue
 from geoqc.domain.models.spatial_intelligence import (
     BoundarySnapConfig,
     BoundarySnapResult,
@@ -37,6 +60,26 @@ from geoqc.domain.models.spatial_intelligence import (
     RoadRepairSegment,
     SmallPolygonConfig,
     SmallPolygonReport,
+)
+from geoqc.infrastructure.gis.dataset_workflow import (
+    audit_file,
+    audit_geodataframe,
+    audit_layers,
+    build_repair_plan,
+    dump_quality_profile,
+    load_quality_profile,
+    quality_profile_from_dict,
+    run_quality_workflow,
+    write_audit_report,
+    write_issue_layers,
+)
+from geoqc.infrastructure.gis.quality_workflow import (
+    assess_crs,
+    evaluate_topology_rules,
+    issues_to_geodataframe,
+)
+from geoqc.infrastructure.gis.quality_workflow import (
+    audit_dataset as audit_geometries,
 )
 from geoqc.infrastructure.gis.shapely_enterprise_spatial import (
     ShapelyDatasetComparator,
@@ -53,14 +96,31 @@ from geoqc.infrastructure.gis.shapely_spatial_intelligence import (
 from geoqc.infrastructure.gis.shapely_topology_repairer import ShapelyTopologyRepairer
 
 __all__ = [
+    "AttributeRule",
+    "AttributeRuleType",
+    "CategoryScore",
     "CoverageRepairResult",
+    "CrsGuardResult",
+    "CrsUnitStatus",
+    "DatasetAuditResult",
+    "DatasetIssue",
+    "DatasetLayer",
     "BoundarySnapConfig",
     "BoundarySnapResult",
     "GeometryIssueType",
     "GeometryRepairResult",
     "GeometryValidationIssue",
     "GeometryValidationResult",
+    "IssueGeometryKind",
+    "QualityGatePolicy",
+    "QualityPreset",
+    "QualityProfile",
     "RepairConfig",
+    "RepairIssueType",
+    "RepairPlan",
+    "RepairPlanAction",
+    "RepairPlanConflict",
+    "RepairRisk",
     "RepairSession",
     "RoadNetworkConfig",
     "RoadNetworkReport",
@@ -79,19 +139,40 @@ __all__ = [
     "SpatialDuplicateConfig",
     "SpatialDuplicateReport",
     "SpatialLayer",
+    "ScoreDeduction",
+    "ScoringPolicy",
+    "TopologyRule",
+    "TopologyRuleType",
+    "WorkflowArtifacts",
     "analyze_road_network",
+    "assess_crs",
+    "audit_geometries",
+    "audit_file",
+    "audit_geodataframe",
+    "audit_layers",
+    "build_quality_report",
+    "build_repair_plan",
     "repair_road_network",
     "analyze_small_polygons",
     "analyze_spatial_conflicts",
     "compare_datasets",
     "detect_spatial_duplicates",
+    "evaluate_topology_rules",
+    "dump_quality_profile",
+    "issues_to_geodataframe",
+    "load_quality_profile",
     "prioritize_repairs",
+    "quality_profile_from_dict",
     "__version__",
     "open_repair_session",
     "repair_geometries",
+    "repair_geometries_safely",
     "repair_geometry",
+    "run_quality_workflow",
     "snap_boundaries",
     "validate_geometry",
+    "write_audit_report",
+    "write_issue_layers",
 ]
 
 __version__: str = "0.1.0"
@@ -244,6 +325,61 @@ def repair_geometries(
     """
     wkts = [_to_wkt(_require_geometry(geometry)) for geometry in geometries]
     return _topology_repairer.repair_coverage(wkts, config or RepairConfig())
+
+
+def repair_geometries_safely(geometries: Sequence[BaseGeometry]) -> CoverageRepairResult:
+    """Apply only shape-preserving duplicate-vertex cleanup.
+
+    Ambiguous operations such as invalid-geometry reconstruction, sliver
+    removal, overlap resolution, and gap filling remain disabled. This is the
+    appropriate default for unattended jobs and future QGIS "fix safe" UI.
+    """
+    return repair_geometries(
+        geometries,
+        RepairConfig(
+            fix_invalid=False,
+            remove_slivers=False,
+            resolve_overlaps=False,
+            fill_gaps=False,
+            max_shape_shift=0.0,
+            max_relative_area_change=0.0,
+        ),
+    )
+
+
+def build_quality_report(result: DatasetAuditResult) -> QualityReport:
+    """Convert a dataset audit into the existing renderer-ready report model."""
+    issues = tuple(
+        QualityReportIssue(
+            code=item.code,
+            title=item.title,
+            description=item.message,
+            severity=item.severity,
+            category=item.category.title(),
+            recommendation=item.recommendation,
+            location=(
+                f"{item.layer or result.dataset_name}, feature {item.feature_index}"
+                if item.feature_index is not None
+                else item.layer or result.dataset_name
+            ),
+        )
+        for item in result.issues
+    )
+    return QualityReport(
+        title="GeoQC dataset quality report",
+        dataset_name=result.dataset_name,
+        total_checks=max(1, result.feature_count),
+        passed_checks=max(
+            0,
+            result.feature_count
+            - len({item.feature_index for item in result.issues if item.feature_index is not None}),
+        ),
+        issues=issues,
+        summary=(
+            f"Quality score {result.quality_score:.2f}/100; "
+            f"{len(result.issues)} issue(s) found across {result.feature_count} feature(s)."
+        ),
+    )
 
 
 def open_repair_session(

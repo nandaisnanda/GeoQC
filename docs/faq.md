@@ -10,8 +10,11 @@ interactive-map reporting. See [docs/index.md](index.md) for the full list.
 
 ## Does GeoQC repair or modify my data?
 
-No. GeoQC only reports issues; it never rewrites, repairs, or silently
-modifies source datasets or files you pass to it.
+GeoQC can compute repaired geometries and the `repair-roads` command can write
+a new output GeoPackage. It never silently modifies the source dataset.
+Library repair results retain before/after WKT and change metrics; use
+`repair_geometries_safely()` for shape-preserving duplicate-vertex cleanup or
+preview reviewed repairs before writing a separate output layer.
 
 ## Why are KML and GML rejected by the API?
 

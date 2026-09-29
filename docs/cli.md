@@ -15,6 +15,7 @@ geoqc --help
 | `geoqc --version`             | Print the installed GeoQC version and exit.      | `0`       |
 | `geoqc audit PATH`            | Audit supported datasets under a file or folder. | `0`/`1`   |
 | `geoqc audit PATH --workers N`| Set a safe requested worker upper bound.          | `0`/`1`   |
+| `geoqc check DATASET`         | Run unified profile-driven dataset QC.            | `0`/`1`/`2` |
 | `geoqc repair-roads IN OUT`   | Snap and fully node a road layer into a new GPKG. | `0`/`2`   |
 | `geoqc` (no args)             | Equivalent to `--help`.                          | `0`       |
 | Unknown option                | Reject the invocation with a usage error.         | `2`       |
@@ -32,6 +33,34 @@ input path that does not exist). Audit commands return `1` when any discovered
 dataset fails; failures are isolated and remaining datasets continue. The
 CLI disables pretty tracebacks (`pretty_exceptions_enable=False`) so
 unexpected errors print a plain message instead of an internal stack trace.
+
+### Profile-driven quality check
+
+Run a complete dataset check with a built-in preset:
+
+```bash
+geoqc check parcels.gpkg \
+  --layer parcels \
+  --preset parcel \
+  --issues parcel-issues.gpkg \
+  --report parcel-report.html
+```
+
+Use a shareable profile for CRS, attributes, scoring, and gate policy:
+
+```bash
+geoqc check parcels.gpkg \
+  --layer parcels \
+  --profile parcel-profile.yaml \
+  --issues parcel-issues.gpkg \
+  --report parcel-report.json \
+  --overwrite
+```
+
+`check` returns `0` when the gate passes, `1` when quality requirements fail,
+and `2` for input, profile, or output errors. `--minimum-score` and `--fail-on`
+override gate thresholds for one invocation. See the
+[dataset quality workflow](quality-workflow.md) for result and profile schemas.
 
 Folder discovery is deterministic and scans one level deep by default; pass
 `--recursive` (`-r`) to descend into subdirectories. Supported suffixes are

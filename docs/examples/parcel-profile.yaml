@@ -1,0 +1,45 @@
+name: parcel-delivery
+version: 1
+preset: parcel
+id_column: parcel_id
+tolerance: 0.001
+minimum_area: 5.0
+
+crs:
+  required: true
+  require_projected: true
+  allowed:
+    - EPSG:32748
+
+attribute_rules:
+  - type: required
+    column: parcel_id
+    severity: critical
+  - type: unique
+    column: parcel_id
+    severity: error
+  - type: not_null
+    column: owner
+    severity: warning
+  - type: allowed_values
+    column: status
+    allowed_values: [active, inactive]
+    severity: error
+
+scoring:
+  category_weights:
+    geometry: 0.35
+    topology: 0.35
+    network: 0.10
+    attribute: 0.15
+    metadata: 0.05
+  severity_penalties:
+    info: 1
+    warning: 5
+    error: 10
+    critical: 25
+
+quality_gate:
+  minimum_score: 90
+  fail_on: error
+  allow_unknown_crs: false

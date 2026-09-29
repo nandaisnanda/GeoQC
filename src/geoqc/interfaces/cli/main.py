@@ -7,12 +7,22 @@ from uuid import uuid4
 
 import typer
 
-from geoqc import __version__
+from geoqc import (
+    QualityGatePolicy,
+    QualityPreset,
+    QualityProfile,
+    __version__,
+    audit_file,
+    load_quality_profile,
+    write_audit_report,
+    write_issue_layers,
+)
 from geoqc.application.benchmarking import BenchmarkReport
 from geoqc.application.parallel import ParallelBatchExecutor
 from geoqc.application.parallel.scheduler import TaskScheduler
 from geoqc.application.services import BatchProcessor
 from geoqc.domain.models.spatial_intelligence import RoadNetworkRepairConfig
+from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.parallel_audit import (
     DatasetAudit,
     DatasetAuditWorker,
@@ -126,6 +136,80 @@ def audit(
             raise typer.Exit(code=2) from error
         typer.echo(f"Benchmark report: {benchmark_output}")
     if not result.is_successful:
+        raise typer.Exit(code=1)
+
+
+@app.command("check")
+def check_dataset(
+    source: Annotated[Path, typer.Argument(help="Input vector dataset.")],
+    profile_path: Annotated[
+        Path | None,
+        typer.Option("--profile", help="JSON or YAML quality profile."),
+    ] = None,
+    preset: Annotated[
+        QualityPreset | None,
+        typer.Option(help="Built-in preset when no profile is supplied."),
+    ] = None,
+    layer: Annotated[
+        str | None,
+        typer.Option(help="Layer name for a multi-layer GeoPackage."),
+    ] = None,
+    issues: Annotated[
+        Path | None,
+        typer.Option(help="Optional output GeoPackage containing issue layers."),
+    ] = None,
+    report: Annotated[
+        Path | None,
+        typer.Option(help="Optional .json or .html quality report."),
+    ] = None,
+    minimum_score: Annotated[
+        float | None,
+        typer.Option(min=0, max=100, help="Override the profile quality threshold."),
+    ] = None,
+    fail_on: Annotated[
+        Severity | None,
+        typer.Option(help="Override failure severity: info, warning, error, critical."),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing issue GeoPackage."),
+    ] = False,
+) -> None:
+    """Run the unified, profile-driven dataset quality workflow."""
+    try:
+        profile = (
+            load_quality_profile(profile_path)
+            if profile_path is not None
+            else QualityProfile(
+                name=f"{preset.value if preset else 'geometry'}-cli",
+                preset=preset,
+                require_crs=False,
+            )
+        )
+        result = audit_file(source, layer=layer, profile=profile)
+        if issues is not None:
+            write_issue_layers(result, issues, overwrite=overwrite)
+        if report is not None:
+            write_audit_report(result, report)
+    except (FileExistsError, FileNotFoundError, OSError, TypeError, ValueError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    policy = QualityGatePolicy(
+        minimum_score=(minimum_score if minimum_score is not None else profile.gate.minimum_score),
+        fail_on=fail_on or profile.gate.fail_on,
+        allow_unknown_crs=profile.gate.allow_unknown_crs,
+    )
+    typer.echo(
+        f"QC complete: dataset={result.dataset_name} features={result.feature_count} "
+        f"issues={len(result.issues)} score={result.quality_score:.2f} "
+        f"status={'PASS' if result.passes(policy) else 'FAIL'}"
+    )
+    if issues is not None:
+        typer.echo(f"Issue layers: {issues.resolve()}")
+    if report is not None:
+        typer.echo(f"Report: {report.resolve()}")
+    if not result.passes(policy):
         raise typer.Exit(code=1)
 
 

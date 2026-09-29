@@ -8,6 +8,7 @@ indexes the documentation beyond the [README](../README.md).
 
 - [Architecture](architecture.md)
 - [Intelligent topology repair](topology-repair.md)
+- [Dataset quality workflow](quality-workflow.md)
 - [Spatial intelligence](spatial-intelligence.md)
 - [Rule engine](rule-engine.md)
 - [Streaming Engine](streaming-engine.md)

@@ -52,7 +52,9 @@ library always agree on what is valid. See [Architecture](docs/architecture.md).
 - Process bounded batches and generate optional HTML or interactive reports.
 - Expose a hardened FastAPI upload endpoint and a responsive React client.
 
-GeoQC does not repair or silently modify source datasets.
+GeoQC can return repaired geometries or write a new output dataset, but it
+never silently modifies a source dataset. Ambiguous repairs are marked for
+review and retain before/after geometry plus change metrics.
 
 ## Requirements
 
@@ -83,6 +85,30 @@ python -m pip install .
 
 ## Quick start
 
+### Audit a dataset in Python
+
+Load a reusable profile and obtain one result covering geometry, topology,
+CRS, and attributes:
+
+```python
+from geoqc import audit_file, load_quality_profile, write_issue_layers
+
+profile = load_quality_profile("parcel-profile.yaml")
+result = audit_file("parcels.gpkg", layer="parcels", profile=profile)
+
+print(result.quality_score)
+print(result.issues[0].recommendation)
+write_issue_layers(result, "parcel-issues.gpkg")
+```
+
+Presets are available for parcels, administrative boundaries, roads, and
+point surveys. Findings include severity, repair risk, source feature indexes,
+suggested fixes, and issue geometry. See the
+[dataset quality workflow](docs/quality-workflow.md) for custom cross-layer
+rules, safe repair, reports, CRS/unit guards, and CI quality gates.
+
+### Validate one geometry
+
 Validate one Shapely geometry using the stable top-level API:
 
 ```python
@@ -112,6 +138,7 @@ The initial CLI exposes package information and a stable command surface:
 geoqc --help
 geoqc --version
 geoqc audit path/to/folder
+geoqc check parcels.gpkg --preset parcel --issues issues.gpkg --report report.html
 geoqc repair-roads roads.shp repaired.gpkg --snap-tolerance 0.1
 ```
 

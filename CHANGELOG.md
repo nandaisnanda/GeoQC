@@ -8,6 +8,16 @@ All notable changes to GeoQC are documented here. This project follows
 
 ### Added
 
+- Unified `audit_file`, `audit_geodataframe`, `audit_layers`, and
+  `run_quality_workflow` APIs covering geometry, topology, CRS, and attribute
+  checks through one versioned result contract.
+- Shareable JSON/YAML quality profiles, stable issue fingerprints with optional
+  business feature IDs, weighted explainable scoring, quality gates, repair
+  plans with conflict detection, atomic issue GeoPackages, and one-call
+  JSON/HTML reports.
+- `geoqc check` profile-driven CLI workflow with issue/report outputs and
+  conventional pass/fail/error exit codes.
+
 - Public `repair_road_network` API with conservative endpoint snapping, full
   intersection noding, and source-feature provenance.
 - Safe `geoqc repair-roads` file workflow with attribute preservation, atomic
