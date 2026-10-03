@@ -69,9 +69,7 @@ def test_public_road_repair_returns_noded_segments() -> None:
         LineString([(2.05, 0), (3, 0)]),
     ]
 
-    result = geoqc.repair_road_network(
-        roads, geoqc.RoadNetworkRepairConfig(snap_tolerance=0.1)
-    )
+    result = geoqc.repair_road_network(roads, geoqc.RoadNetworkRepairConfig(snap_tolerance=0.1))
 
     assert result.snapped_endpoint_count == 1
     assert result.output_segment_count == 5

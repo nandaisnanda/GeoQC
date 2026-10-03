@@ -7,6 +7,23 @@ clickable point, line, and polygon issue layers.
 
 ## One-call file workflow
 
+`audit_dataset()` is the stable, dataset-level entry point for a read-only
+audit. It uses the existing automatic geometry engine, CRS guard, and attribute
+scanner and returns a deterministic `DatasetAuditReport`:
+
+```python
+import geoqc
+
+report = geoqc.audit_dataset("data.gpkg", layer=None, schema=None, checks="all")
+for check in report.checks:
+    print(check.name, check.status, check.reason, check.issue_count)
+```
+
+Every report contains file/layer metadata, selected engine, feature count,
+per-check status, issue counts, feature indices, severity, and recommendations.
+Checks that need a schema, topology rules, reference layers, projected units,
+or other missing prerequisites are `skipped`, never silently executed.
+
 `audit_file()` and `audit_geodataframe()` combine geometry, topology, CRS,
 and configured attribute checks into one versioned result.
 
@@ -121,8 +138,45 @@ issues = evaluate_topology_rules(
 )
 ```
 
-Supported declarative constraints are `no_overlap`, `no_gap`, `no_duplicate`,
-`must_be_inside`, `must_not_intersect`, and `minimum_area`.
+Supported declarative constraints include the original `no_overlap`, `no_gap`,
+`no_duplicate`, `must_be_inside`, `must_not_intersect`, and `minimum_area`
+rules plus the Phase-2 topology rules below.
+
+| Rule | Required configuration | Meaning |
+| --- | --- | --- |
+| `boundary_must_match` | `reference_layer` | Every source boundary section must lie on a reference boundary. `tolerance` permits a small offset. |
+| `no_dangles` | optional `tolerance` | Line endpoints must coincide with another line endpoint. |
+| `endpoint_must_connect` | optional `tolerance` | Line endpoints must connect anywhere on another line, including a T-junction. |
+| `no_overshoot_undershoot` | positive `tolerance` | Finds short tails beyond intersections and endpoints stopping just short of another line. |
+| `allowed_geometry_type` | `allowed_geometry_types` | Restricts Shapely geometry type names, such as `Point` or `Polygon`. |
+| `singlepart_only` | none | Rejects multi-geometries and geometry collections. |
+| `no_spikes` | positive `minimum_angle` | Finds vertices with an interior angle below the threshold in degrees. |
+| `minimum_segment_length` | positive `minimum_length` | Finds consecutive vertices forming a short segment. |
+| `minimum_vertex_distance` | positive `minimum_distance` | Finds non-adjacent vertices that are too close. |
+| `must_touch`, `must_intersect`, `must_cover` | `reference_layer` | Applies the named spatial predicate against a reference feature. |
+| `attribute_overlap` | `attribute_column`, `overlap_policy` | Controls polygon overlap with `deny_all`, `allow_equal`, or `allow_different`. |
+| `precision_grid` | positive `precision_grid_size` | Finds vertices off-grid by more than `tolerance`; it does not mutate coordinates. |
+
+For example, this profile fragment permits overlap only between parcels with
+the same zoning class and checks a centimetre coordinate grid:
+
+```yaml
+topology_rules:
+  - type: attribute_overlap
+    layer: parcels
+    attribute_column: zone
+    overlap_policy: allow_equal
+  - type: precision_grid
+    layer: parcels
+    precision_grid_size: 0.01
+    tolerance: 0.000001
+```
+
+Distance, length, and precision values use the layer CRS coordinate units;
+`minimum_angle` is always expressed in degrees. Attribute overlap rules loaded
+through `audit_geodataframe()` or `audit_layers()` read the named column from
+the source frame. All Phase-2 checks are detection-only and include issue WKT,
+feature indices, metrics, and a suggested review action.
 
 ## Reports and CI gates
 

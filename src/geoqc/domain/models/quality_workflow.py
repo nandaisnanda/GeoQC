@@ -48,6 +48,28 @@ class TopologyRuleType(StrEnum):
     MUST_BE_INSIDE = "must_be_inside"
     MUST_NOT_INTERSECT = "must_not_intersect"
     MINIMUM_AREA = "minimum_area"
+    BOUNDARY_MUST_MATCH = "boundary_must_match"
+    NO_DANGLES = "no_dangles"
+    ENDPOINT_MUST_CONNECT = "endpoint_must_connect"
+    NO_OVERSHOOT_UNDERSHOOT = "no_overshoot_undershoot"
+    ALLOWED_GEOMETRY_TYPE = "allowed_geometry_type"
+    SINGLEPART_ONLY = "singlepart_only"
+    NO_SPIKES = "no_spikes"
+    MINIMUM_SEGMENT_LENGTH = "minimum_segment_length"
+    MINIMUM_VERTEX_DISTANCE = "minimum_vertex_distance"
+    MUST_TOUCH = "must_touch"
+    MUST_INTERSECT = "must_intersect"
+    MUST_COVER = "must_cover"
+    ATTRIBUTE_OVERLAP = "attribute_overlap"
+    PRECISION_GRID = "precision_grid"
+
+
+class AttributeOverlapPolicy(StrEnum):
+    """Decide which overlapping feature pairs are permitted by an attribute."""
+
+    DENY_ALL = "deny_all"
+    ALLOW_EQUAL = "allow_equal"
+    ALLOW_DIFFERENT = "allow_different"
 
 
 class AttributeRuleType(StrEnum):
@@ -83,19 +105,62 @@ class TopologyRule:
     reference_layer: str | None = None
     tolerance: float = 0.0
     minimum_area: float = 0.0
+    minimum_length: float = 0.0
+    minimum_distance: float = 0.0
+    minimum_angle: float = 0.0
+    allowed_geometry_types: tuple[str, ...] = ()
+    precision_grid_size: float = 0.0
+    attribute_column: str | None = None
+    overlap_policy: AttributeOverlapPolicy = AttributeOverlapPolicy.DENY_ALL
     severity: Severity = Severity.ERROR
 
     def __post_init__(self) -> None:
         if not self.layer.strip():
             raise ValueError("layer must not be empty")
-        if self.tolerance < 0 or self.minimum_area < 0:
+        if any(
+            value < 0
+            for value in (
+                self.tolerance,
+                self.minimum_area,
+                self.minimum_length,
+                self.minimum_distance,
+                self.minimum_angle,
+                self.precision_grid_size,
+            )
+        ):
             raise ValueError("rule thresholds must be non-negative")
+        if self.minimum_angle > 180:
+            raise ValueError("minimum_angle must not exceed 180 degrees")
         needs_reference = self.rule_type in {
             TopologyRuleType.MUST_BE_INSIDE,
             TopologyRuleType.MUST_NOT_INTERSECT,
+            TopologyRuleType.BOUNDARY_MUST_MATCH,
+            TopologyRuleType.MUST_TOUCH,
+            TopologyRuleType.MUST_INTERSECT,
+            TopologyRuleType.MUST_COVER,
         }
         if needs_reference and not self.reference_layer:
             raise ValueError(f"{self.rule_type.value} requires reference_layer")
+        if (
+            self.rule_type is TopologyRuleType.ALLOWED_GEOMETRY_TYPE
+            and not self.allowed_geometry_types
+        ):
+            raise ValueError("allowed_geometry_type requires allowed_geometry_types")
+        if self.rule_type is TopologyRuleType.NO_SPIKES and self.minimum_angle <= 0:
+            raise ValueError("no_spikes requires a positive minimum_angle")
+        if self.rule_type is TopologyRuleType.MINIMUM_SEGMENT_LENGTH and self.minimum_length <= 0:
+            raise ValueError("minimum_segment_length requires a positive minimum_length")
+        if (
+            self.rule_type is TopologyRuleType.MINIMUM_VERTEX_DISTANCE
+            and self.minimum_distance <= 0
+        ):
+            raise ValueError("minimum_vertex_distance requires a positive minimum_distance")
+        if self.rule_type is TopologyRuleType.PRECISION_GRID and self.precision_grid_size <= 0:
+            raise ValueError("precision_grid requires a positive precision_grid_size")
+        if self.rule_type is TopologyRuleType.ATTRIBUTE_OVERLAP and (
+            self.attribute_column is None or not self.attribute_column.strip()
+        ):
+            raise ValueError("attribute_overlap requires attribute_column")
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,10 +170,18 @@ class DatasetLayer:
     name: str
     geometries_wkt: tuple[str, ...]
     crs: str | None = None
+    attributes: tuple[Mapping[str, str | int | float | bool | None], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise ValueError("layer name must not be empty")
+        if self.attributes and len(self.attributes) != len(self.geometries_wkt):
+            raise ValueError("attributes must contain one mapping per geometry")
+        object.__setattr__(
+            self,
+            "attributes",
+            tuple(MappingProxyType(dict(item)) for item in self.attributes),
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -115,7 +115,21 @@ def test_profile_parser_builds_all_nested_configuration() -> None:
                 "require_projected": True,
                 "allowed": ["EPSG:3857"],
             },
-            "topology_rules": [{"type": "minimum_area", "layer": "complete", "minimum_area": 3}],
+            "topology_rules": [
+                {"type": "minimum_area", "layer": "complete", "minimum_area": 3},
+                {
+                    "type": "attribute_overlap",
+                    "layer": "complete",
+                    "attribute_column": "zone",
+                    "overlap_policy": "allow_equal",
+                    "tolerance": 0.01,
+                },
+                {
+                    "type": "precision_grid",
+                    "layer": "complete",
+                    "precision_grid_size": 0.001,
+                },
+            ],
             "attribute_rules": [
                 {
                     "type": "numeric_range",
@@ -144,6 +158,9 @@ def test_profile_parser_builds_all_nested_configuration() -> None:
 
     assert profile.version == 2
     assert profile.topology_rules[0].minimum_area == 3
+    assert profile.topology_rules[1].attribute_column == "zone"
+    assert profile.topology_rules[1].overlap_policy is geoqc.AttributeOverlapPolicy.ALLOW_EQUAL
+    assert profile.topology_rules[2].precision_grid_size == 0.001
     assert profile.attribute_rules[0].maximum == 5
     assert profile.scoring.category_weights == {"geometry": 1}
     assert profile.gate.allow_unknown_crs

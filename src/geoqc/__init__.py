@@ -8,12 +8,21 @@ from shapely.geometry.base import BaseGeometry
 from geoqc.application.services.repair_recommendation import RepairRecommendationEngine
 from geoqc.application.services.topology_repair import RepairSession
 from geoqc.domain.models import (
+    AttributeColumnSchema,
+    AttributeDataType,
+    AttributeOverlapPolicy,
     AttributeRule,
     AttributeRuleType,
+    AttributeSchema,
+    AuditCheckResult,
+    AuditDatasetMetadata,
+    AuditIssue,
     CategoryScore,
+    CheckStatus,
     CoverageRepairResult,
     CrsGuardResult,
     CrsUnitStatus,
+    DatasetAuditReport,
     DatasetAuditResult,
     DatasetIssue,
     DatasetLayer,
@@ -61,6 +70,7 @@ from geoqc.domain.models.spatial_intelligence import (
     SmallPolygonConfig,
     SmallPolygonReport,
 )
+from geoqc.infrastructure.gis.dataset_audit import audit_dataset
 from geoqc.infrastructure.gis.dataset_workflow import (
     audit_file,
     audit_geodataframe,
@@ -96,13 +106,22 @@ from geoqc.infrastructure.gis.shapely_spatial_intelligence import (
 from geoqc.infrastructure.gis.shapely_topology_repairer import ShapelyTopologyRepairer
 
 __all__ = [
+    "AttributeOverlapPolicy",
+    "AttributeColumnSchema",
+    "AttributeDataType",
     "AttributeRule",
     "AttributeRuleType",
+    "AttributeSchema",
+    "AuditCheckResult",
+    "AuditDatasetMetadata",
+    "AuditIssue",
     "CategoryScore",
     "CoverageRepairResult",
     "CrsGuardResult",
     "CrsUnitStatus",
+    "CheckStatus",
     "DatasetAuditResult",
+    "DatasetAuditReport",
     "DatasetIssue",
     "DatasetLayer",
     "BoundarySnapConfig",
@@ -147,6 +166,7 @@ __all__ = [
     "analyze_road_network",
     "assess_crs",
     "audit_geometries",
+    "audit_dataset",
     "audit_file",
     "audit_geodataframe",
     "audit_layers",

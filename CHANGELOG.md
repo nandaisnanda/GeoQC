@@ -8,6 +8,17 @@ All notable changes to GeoQC are documented here. This project follows
 
 ### Added
 
+- Public `geoqc.audit_dataset()` workflow with deterministic dataset metadata,
+  geometry/CRS/schema/topology/spatial check results, actionable skipped-check
+  reasons, normalized issue details, and automatic streaming engine selection.
+- `geoqc audit` now consumes the unified workflow while preserving folder and
+  recursive discovery, multiprocessing, benchmarking, and exit codes.
+
+- Phase-2 declarative topology rules for boundary matching, line connectivity,
+  overshoot/undershoot, allowed geometry types, multipart restrictions, acute
+  angles, minimum segment/vertex distances, touch/intersect/cover predicates,
+  attribute-driven overlap policies, and precision-grid validation.
+
 - Unified `audit_file`, `audit_geodataframe`, `audit_layers`, and
   `run_quality_workflow` APIs covering geometry, topology, CRS, and attribute
   checks through one versioned result contract.

@@ -89,6 +89,7 @@ omit = ["*/__init__.py"]
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
+extend-exclude = [".geoqc-*", "artifacts", "benchmarks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]

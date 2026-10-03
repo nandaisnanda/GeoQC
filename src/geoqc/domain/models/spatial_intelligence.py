@@ -179,6 +179,7 @@ class RoadNetworkRepairResult:
             ],
         }
 
+
 class SmallPolygonIssueType(StrEnum):
     SLIVER_POLYGON = "sliver_polygon"
     TINY_ISLAND = "tiny_island"

@@ -162,9 +162,7 @@ class ShapelyRoadNetworkAnalyzer:
             }
             endpoint_degree = sum(
                 point.distance(endpoints[int(candidate)]) <= config.duplicate_tolerance
-                for candidate in endpoint_tree.query(
-                    point.buffer(config.duplicate_tolerance)
-                )
+                for candidate in endpoint_tree.query(point.buffer(config.duplicate_tolerance))
             )
             if not connected_lines and endpoint_degree == 1:
                 owner = owners[line_index]
@@ -208,7 +206,8 @@ class ShapelyRoadNetworkAnalyzer:
             if line.is_ring and line.length <= config.max_loop_length:
                 findings.append(
                     RoadFinding(
-                        RoadIssueType.LOOP_ERROR, (owners[left],),
+                        RoadIssueType.LOOP_ERROR,
+                        (owners[left],),
                         _wkt(line.centroid),
                         "Unexpected short closed loop",
                         line.length,
@@ -266,9 +265,10 @@ class ShapelyRoadNetworkAnalyzer:
 
     @staticmethod
     def _is_endpoint(line: LineString, point: Point) -> bool:
-        return point.distance(Point(line.coords[0])) <= 1e-12 or point.distance(
-            Point(line.coords[-1])
-        ) <= 1e-12
+        return (
+            point.distance(Point(line.coords[0])) <= 1e-12
+            or point.distance(Point(line.coords[-1])) <= 1e-12
+        )
 
 
 class ShapelyRoadNetworkRepairer:
@@ -352,10 +352,7 @@ class ShapelyRoadNetworkRepairer:
                 if any(endpoints[item][0] == line_index for item in groups[group_index]):
                     continue
                 radius = min(
-                    max(
-                        endpoints[anchor][2].distance(endpoints[member][2])
-                        for member in members
-                    )
+                    max(endpoints[anchor][2].distance(endpoints[member][2]) for member in members)
                     for anchor in members
                 )
                 if radius <= tolerance and (selected is None or radius < selected[0]):
@@ -373,14 +370,8 @@ class ShapelyRoadNetworkRepairer:
             anchor_index = min(
                 group,
                 key=lambda candidate: (
-                    max(
-                        endpoints[candidate][2].distance(endpoints[member][2])
-                        for member in group
-                    ),
-                    sum(
-                        endpoints[candidate][2].distance(endpoints[member][2])
-                        for member in group
-                    ),
+                    max(endpoints[candidate][2].distance(endpoints[member][2]) for member in group),
+                    sum(endpoints[candidate][2].distance(endpoints[member][2]) for member in group),
                     candidate,
                 ),
             )
@@ -411,9 +402,7 @@ class ShapelyRoadNetworkRepairer:
                 ]
                 if not nearby or any(point.distance(clustered[item]) <= 1e-12 for item in nearby):
                     continue
-                target_index = min(
-                    nearby, key=lambda item: (point.distance(clustered[item]), item)
-                )
+                target_index = min(nearby, key=lambda item: (point.distance(clustered[item]), item))
                 distance = point.distance(clustered[target_index])
                 if distance <= tolerance:
                     projected_targets[(line_index, endpoint_index)] = nearest_points(
@@ -432,9 +421,7 @@ class ShapelyRoadNetworkRepairer:
         return result, moved
 
     @staticmethod
-    def _replace_endpoints(
-        line: LineString, start: Point | None, end: Point | None
-    ) -> LineString:
+    def _replace_endpoints(line: LineString, start: Point | None, end: Point | None) -> LineString:
         coordinates = list(line.coords)
 
         def compatible(point: Point, original: tuple[float, ...]) -> tuple[float, ...]:

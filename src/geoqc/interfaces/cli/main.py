@@ -113,10 +113,15 @@ def audit(
             typer.echo(f"FAILED {item.source}: {item.error}")
             continue
         audit_result = item.value.result
+        report_suffix = (
+            f" status={item.value.report.status.value} issues={item.value.report.issue_count}"
+            if item.value.report is not None
+            else ""
+        )
         typer.echo(
             f"OK {item.source}: engine={item.value.decision.engine} "
             f"features={audit_result.feature_count} "
-            f"invalid={audit_result.invalid_feature_count}"
+            f"invalid={audit_result.invalid_feature_count}{report_suffix}"
         )
     typer.echo(
         f"Audit complete: total={result.total} succeeded={result.succeeded} failed={result.failed}"

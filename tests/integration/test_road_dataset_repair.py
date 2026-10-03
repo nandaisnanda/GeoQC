@@ -53,9 +53,7 @@ def test_repair_dataset_requires_layer_for_multilayer_geopackage(tmp_path: Path)
     _roads().to_file(source, layer="second", driver="GPKG", append=True)
 
     with pytest.raises(ValueError, match="multiple layers"):
-        RoadDatasetRepairer().repair(
-            source, tmp_path / "out.gpkg", RoadNetworkRepairConfig()
-        )
+        RoadDatasetRepairer().repair(source, tmp_path / "out.gpkg", RoadNetworkRepairConfig())
 
     result = RoadDatasetRepairer().repair(
         source,
@@ -106,9 +104,7 @@ def test_repair_dataset_rejects_invalid_content(
     frame.to_file(source, driver="GPKG")
 
     with pytest.raises(ValueError, match=message):
-        RoadDatasetRepairer().repair(
-            source, tmp_path / "out.gpkg", RoadNetworkRepairConfig()
-        )
+        RoadDatasetRepairer().repair(source, tmp_path / "out.gpkg", RoadNetworkRepairConfig())
 
 
 def test_repair_dataset_guards_geographic_snapping(tmp_path: Path) -> None:
@@ -135,9 +131,7 @@ def test_repair_dataset_rejects_reserved_columns_and_empty_result(tmp_path: Path
     frame.to_file(source, driver="GeoJSON")
 
     with pytest.raises(ValueError, match="reserved GeoQC columns"):
-        RoadDatasetRepairer().repair(
-            source, tmp_path / "out.gpkg", RoadNetworkRepairConfig()
-        )
+        RoadDatasetRepairer().repair(source, tmp_path / "out.gpkg", RoadNetworkRepairConfig())
 
     clean_source = tmp_path / "clean.geojson"
     _roads().to_file(clean_source, driver="GeoJSON")

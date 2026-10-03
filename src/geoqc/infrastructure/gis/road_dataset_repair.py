@@ -19,9 +19,7 @@ from geoqc.infrastructure.gis.shapely_spatial_intelligence import (
 )
 
 _SUPPORTED_INPUT_SUFFIXES = frozenset({".fgb", ".geojson", ".gpkg", ".json", ".shp"})
-_AUDIT_COLUMNS = frozenset(
-    {"_geoqc_segment", "_geoqc_sources", "_geoqc_length", "_geoqc_layer"}
-)
+_AUDIT_COLUMNS = frozenset({"_geoqc_segment", "_geoqc_sources", "_geoqc_length", "_geoqc_layer"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,9 +80,7 @@ class RoadDatasetRepairer:
         )
         frame = gpd.read_file(source, layer=selected_layer)
         if len(frame) > max_features:
-            raise ValueError(
-                f"Input has {len(frame)} features; maximum is {max_features}."
-            )
+            raise ValueError(f"Input has {len(frame)} features; maximum is {max_features}.")
         if frame.empty:
             raise ValueError("Input layer contains no features.")
         if frame.geometry.isna().any() or frame.geometry.is_empty.any():
@@ -117,9 +113,7 @@ class RoadDatasetRepairer:
             raise ValueError(
                 "No road segments remain after applying the configured minimum length."
             )
-        repaired = self._restore_attributes(
-            frame, repair.segments, selected_layer or source.stem
-        )
+        repaired = self._restore_attributes(frame, repair.segments, selected_layer or source.stem)
         output.parent.mkdir(parents=True, exist_ok=True)
         temporary = output.with_name(f".{output.stem}.{uuid4().hex}.gpkg")
         try:

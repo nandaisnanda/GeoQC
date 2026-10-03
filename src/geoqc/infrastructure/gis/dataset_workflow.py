@@ -3,6 +3,7 @@
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from math import isnan
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -17,6 +18,7 @@ from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
 from geoqc.domain.models import (
+    AttributeOverlapPolicy,
     AttributeRule,
     AttributeRuleType,
     DatasetAuditResult,
@@ -190,7 +192,12 @@ def audit_geodataframe(
             if rule.layer == dataset_name and rule.reference_layer is None
         )
         if local_rules:
-            layer = DatasetLayer(dataset_name, tuple(_wkt(item) for item in frame.geometry), crs)
+            layer = DatasetLayer(
+                dataset_name,
+                tuple(_wkt(item) for item in frame.geometry),
+                crs,
+                _feature_attributes(frame),
+            )
             issues.extend(evaluate_topology_rules((layer,), local_rules))
         issues = _attach_feature_ids(issues, frame, profile.id_column)
     return _rebuild_result(base, issues, profile.scoring if profile else None)
@@ -244,6 +251,7 @@ def audit_layers(
             name,
             tuple(_wkt(item) for item in frame.geometry),
             frame.crs.to_string() if frame.crs is not None else None,
+            _feature_attributes(frame),
         )
         for name, frame in frames.items()
     )
@@ -546,6 +554,22 @@ def _topology_rule(raw: Mapping[str, object]) -> TopologyRule:
         reference_layer=str(raw["reference_layer"]) if raw.get("reference_layer") else None,
         tolerance=_number(raw.get("tolerance", 0.0), "topology rule tolerance"),
         minimum_area=_number(raw.get("minimum_area", 0.0), "topology rule minimum_area"),
+        minimum_length=_number(raw.get("minimum_length", 0.0), "topology rule minimum_length"),
+        minimum_distance=_number(
+            raw.get("minimum_distance", 0.0), "topology rule minimum_distance"
+        ),
+        minimum_angle=_number(raw.get("minimum_angle", 0.0), "topology rule minimum_angle"),
+        allowed_geometry_types=tuple(
+            str(item)
+            for item in _sequence(raw.get("allowed_geometry_types", ()), "allowed_geometry_types")
+        ),
+        precision_grid_size=_number(
+            raw.get("precision_grid_size", 0.0), "topology rule precision_grid_size"
+        ),
+        attribute_column=(
+            str(raw["attribute_column"]) if raw.get("attribute_column") is not None else None
+        ),
+        overlap_policy=AttributeOverlapPolicy(str(raw.get("overlap_policy", "deny_all"))),
         severity=Severity(str(raw.get("severity", "error"))),
     )
 
@@ -585,6 +609,13 @@ def _profile_dict(profile: QualityProfile) -> dict[str, object]:
                 "reference_layer": item.reference_layer,
                 "tolerance": item.tolerance,
                 "minimum_area": item.minimum_area,
+                "minimum_length": item.minimum_length,
+                "minimum_distance": item.minimum_distance,
+                "minimum_angle": item.minimum_angle,
+                "allowed_geometry_types": list(item.allowed_geometry_types),
+                "precision_grid_size": item.precision_grid_size,
+                "attribute_column": item.attribute_column,
+                "overlap_policy": item.overlap_policy.value,
                 "severity": item.severity.value,
             }
             for item in profile.topology_rules
@@ -664,3 +695,28 @@ def _kind(geometry: BaseGeometry) -> IssueGeometryKind:
 
 def _wkt(geometry: BaseGeometry) -> str:
     return str(shapely.to_wkt(geometry, rounding_precision=-1))
+
+
+def _feature_attributes(
+    frame: gpd.GeoDataFrame,
+) -> tuple[Mapping[str, str | int | float | bool | None], ...]:
+    columns = [column for column in frame.columns if column != frame.geometry.name]
+    records: list[Mapping[str, str | int | float | bool | None]] = []
+    for raw in frame[columns].to_dict(orient="records"):
+        records.append({str(key): _attribute_value(value) for key, value in raw.items()})
+    return tuple(records)
+
+
+def _attribute_value(value: object) -> str | int | float | bool | None:
+    if value is None or value is pd.NA or value is pd.NaT:
+        return None
+    if isinstance(value, (str, int, float, bool)):
+        if isinstance(value, float) and isnan(value):
+            return None
+        return value
+    item = getattr(value, "item", None)
+    if callable(item):
+        normalized = item()
+        if isinstance(normalized, (str, int, float, bool)):
+            return normalized
+    return str(value)

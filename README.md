@@ -43,6 +43,10 @@ library always agree on what is valid. See [Architecture](docs/architecture.md).
   dangling/broken connections, duplicate segments, unnoded intersections,
   conservative endpoint snapping, full intersection noding, and source-feature
   provenance. The `geoqc repair-roads` CLI writes a new GeoPackage atomically.
+- Apply declarative Phase-2 topology checks for matching boundaries, connected
+  endpoints, overshoot/undershoot, geometry types, multipart features, spikes,
+  minimum segment/vertex spacing, spatial relations, attribute-controlled
+  overlap, and precision grids.
 - Stream GeoPackage, Shapefile, GeoJSON, and GeoParquet audits in bounded
   Arrow chunks without loading the complete dataset into RAM.
 - Audit independent datasets concurrently with memory-aware process scheduling,
@@ -87,8 +91,22 @@ python -m pip install .
 
 ### Audit a dataset in Python
 
-Load a reusable profile and obtain one result covering geometry, topology,
-CRS, and attributes:
+Run the public dataset audit with automatic in-memory/streaming selection:
+
+```python
+import geoqc
+
+report = geoqc.audit_dataset("data.gpkg", layer=None, schema=None, checks="all")
+print(report.status, report.issue_count)
+print(report.to_dict())
+```
+
+The report always includes dataset metadata and explicit `passed`, `failed`,
+`error`, or `skipped` outcomes. Attribute checks require an `AttributeSchema`;
+unconfigured topology/spatial checks and checks lacking a safe CRS are skipped
+with an actionable reason.
+
+For profile-driven rules and issue-layer output, load a reusable profile:
 
 ```python
 from geoqc import audit_file, load_quality_profile, write_issue_layers
@@ -143,6 +161,9 @@ geoqc repair-roads roads.shp repaired.gpkg --snap-tolerance 0.1
 ```
 
 Worker count is selected automatically; use `--workers N` as a safe upper bound.
+Each dataset line includes the unified report status and issue count. Folder
+discovery, `--recursive`, multiprocessing, engine selection, and exit codes are
+unchanged.
 See [parallel streaming audits](docs/parallel-streaming.md) and the
 [CLI documentation](docs/cli.md) for behavior and limitations.
 

@@ -27,6 +27,13 @@ from geoqc.domain.models.crs import (
     DatasetCrsMetadata,
     DatasetSource,
 )
+from geoqc.domain.models.dataset_audit import (
+    AuditCheckResult,
+    AuditDatasetMetadata,
+    AuditIssue,
+    CheckStatus,
+    DatasetAuditReport,
+)
 from geoqc.domain.models.datum_shift import (
     DatumShiftAuditResult,
     DatumShiftSample,
@@ -47,6 +54,7 @@ from geoqc.domain.models.quality_report import (
     QualityReportIssue,
 )
 from geoqc.domain.models.quality_workflow import (
+    AttributeOverlapPolicy,
     AttributeRule,
     AttributeRuleType,
     CategoryScore,
@@ -83,6 +91,10 @@ from geoqc.domain.models.topology_repair import (
 )
 
 __all__ = [
+    "AuditCheckResult",
+    "AuditDatasetMetadata",
+    "AuditIssue",
+    "AttributeOverlapPolicy",
     "AttributeColumnSchema",
     "AttributeDataType",
     "AttributeIssueType",
@@ -95,6 +107,7 @@ __all__ = [
     "BatchItemStatus",
     "BatchProgress",
     "BatchResult",
+    "CheckStatus",
     "CoordinateBounds",
     "CoverageRepairResult",
     "CrsAuditResult",
@@ -123,6 +136,7 @@ __all__ = [
     "CrsGuardResult",
     "CrsUnitStatus",
     "DatasetAuditResult",
+    "DatasetAuditReport",
     "DatasetIssue",
     "DatasetLayer",
     "IssueGeometryKind",

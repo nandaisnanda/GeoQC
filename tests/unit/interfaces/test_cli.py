@@ -9,7 +9,15 @@ from typer.testing import CliRunner
 from geoqc.application.engine_selection import DatasetProfile, EngineDecision
 from geoqc.application.parallel import ParallelBatchExecutor
 from geoqc.application.streaming.geometry import GeometryAuditResult
-from geoqc.domain.models import BatchItemResult, BatchItemStatus, BatchResult
+from geoqc.domain.models import (
+    AuditCheckResult,
+    AuditDatasetMetadata,
+    BatchItemResult,
+    BatchItemStatus,
+    BatchResult,
+    CheckStatus,
+    DatasetAuditReport,
+)
 from geoqc.infrastructure.gis.parallel_audit import DatasetAudit
 from geoqc.infrastructure.gis.road_dataset_repair import (
     RoadDatasetRepairer,
@@ -45,7 +53,16 @@ def test_audit_folder_reports_dataset_results(monkeypatch: MonkeyPatch, tmp_path
             BatchItemResult(
                 source=str(source),
                 status=BatchItemStatus.SUCCEEDED,
-                value=DatasetAudit(audit_result, decision),
+                value=DatasetAudit(
+                    audit_result,
+                    decision,
+                    report=DatasetAuditReport(
+                        AuditDatasetMetadata(
+                            str(source), None, "GPKG", "EPSG:3857", 2, "geometry", 0, "streaming"
+                        ),
+                        (AuditCheckResult("geometry", CheckStatus.PASSED),),
+                    ),
+                ),
             ),
         )
     )
@@ -55,6 +72,7 @@ def test_audit_folder_reports_dataset_results(monkeypatch: MonkeyPatch, tmp_path
 
     assert result.exit_code == 0
     assert "engine=streaming features=2 invalid=0" in result.stdout
+    assert "status=passed issues=0" in result.stdout
     assert "total=1 succeeded=1 failed=0" in result.stdout
 
 
@@ -82,9 +100,7 @@ def test_cli_rejects_unknown_options() -> None:
     assert "No such option" in result.output
 
 
-def test_repair_roads_command_writes_report(
-    monkeypatch: MonkeyPatch, tmp_path: Path
-) -> None:
+def test_repair_roads_command_writes_report(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     source = tmp_path / "roads.shp"
     output = tmp_path / "repaired.gpkg"
     report = tmp_path / "report.json"
@@ -114,9 +130,7 @@ def test_repair_roads_command_writes_report(
     assert json.loads(report.read_text(encoding="utf-8"))["output_segment_count"] == 5
 
 
-def test_repair_roads_command_reports_safe_error(
-    monkeypatch: MonkeyPatch, tmp_path: Path
-) -> None:
+def test_repair_roads_command_reports_safe_error(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     def fail(*_args: object, **_kwargs: object) -> RoadDatasetRepairResult:
         raise ValueError("bad road data")
 

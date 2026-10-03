@@ -139,15 +139,12 @@ def test_road_repair_endpoint_cluster_never_exceeds_snap_tolerance() -> None:
     result = ShapelyRoadNetworkRepairer().repair(
         [_wkt(item) for item in roads], RoadNetworkRepairConfig(snap_tolerance=0.1)
     )
-    repaired = shapely.union_all(
-        [shapely.from_wkt(item.geometry_wkt) for item in result.segments]
-    )
+    repaired = shapely.union_all([shapely.from_wkt(item.geometry_wkt) for item in result.segments])
 
     assert result.snapped_endpoint_count == 2
     assert repaired.intersects(shapely.Point(0.09, 0))
     assert all(
-        shapely.Point(line.coords[-1]).distance(shapely.Point(0.09, 0)) <= 0.1
-        for line in roads
+        shapely.Point(line.coords[-1]).distance(shapely.Point(0.09, 0)) <= 0.1 for line in roads
     )
 
 

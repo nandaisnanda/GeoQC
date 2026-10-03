@@ -10,10 +10,9 @@ from geoqc.application.benchmarking import (
 )
 from geoqc.application.engine_selection import EngineDecision
 from geoqc.application.streaming.geometry import GeometryAuditResult
-from geoqc.application.streaming.models import DatasetSource
+from geoqc.domain.models import DatasetAuditReport
 from geoqc.infrastructure.benchmarking import ProcessBenchmarkRecorder
-from geoqc.infrastructure.gis.automatic_geometry_engine import AutomaticGeometryEngine
-from geoqc.infrastructure.gis.streaming import default_reader_registry
+from geoqc.infrastructure.gis.dataset_audit import _audit_dataset_with_geometry
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +22,7 @@ class DatasetAudit:
     result: GeometryAuditResult
     decision: EngineDecision
     benchmark: BenchmarkMetrics | None = None
+    report: DatasetAuditReport | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,22 +35,19 @@ class DatasetAuditWorker:
     rule_count: int = 0
 
     def __call__(self, path: Path) -> DatasetAudit:
-        source = DatasetSource(path=path)
-        reader = default_reader_registry().resolve(source)
-        engine = AutomaticGeometryEngine(reader, chunk_size=self.chunk_size)
         recorder = ProcessBenchmarkRecorder() if self.benchmark_enabled else NoOpBenchmarkRecorder()
         value, metrics = recorder.measure(
-            lambda: engine.run(source),
+            lambda: _audit_dataset_with_geometry(path, chunk_size=self.chunk_size),
             BenchmarkContext(
                 source=str(path),
                 chunk_size=self.chunk_size,
                 worker_count=self.worker_count,
                 rule_count=self.rule_count,
             ),
-            _describe_audit,
+            _describe_unified_audit,
         )
-        result, decision = value
-        return DatasetAudit(result=result, decision=decision, benchmark=metrics)
+        report, result, decision = value
+        return DatasetAudit(result=result, decision=decision, benchmark=metrics, report=report)
 
 
 def audit_dataset(path: Path) -> DatasetAudit:
@@ -63,3 +60,10 @@ def _describe_audit(
 ) -> tuple[int, int, str]:
     result, decision = value
     return result.feature_count, result.feature_count, decision.engine
+
+
+def _describe_unified_audit(
+    value: tuple[DatasetAuditReport, GeometryAuditResult, EngineDecision],
+) -> tuple[int, int, str]:
+    report, _, decision = value
+    return report.metadata.feature_count, report.metadata.feature_count, decision.engine

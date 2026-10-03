@@ -29,6 +29,7 @@ from geoqc.domain.models.spatial_intelligence import RoadIssueType, RoadNetworkC
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.shapely_geometry_validator import ShapelyGeometryValidator
 from geoqc.infrastructure.gis.shapely_spatial_intelligence import ShapelyRoadNetworkAnalyzer
+from geoqc.infrastructure.gis.topology_rules_v2 import evaluate_advanced_rule
 
 _GEOMETRY_DETAILS: Mapping[GeometryIssueType, tuple[str, str, Severity, RepairRisk]] = {
     GeometryIssueType.INVALID_GEOMETRY: (
@@ -157,6 +158,7 @@ def evaluate_topology_rules(
         layer.name: tuple(shapely.from_wkt(value) for value in layer.geometries_wkt)
         for layer in layers
     }
+    attributes = {layer.name: layer.attributes for layer in layers}
     if len(loaded) != len(layers):
         raise ValueError("layer names must be unique")
     findings: list[DatasetIssue] = []
@@ -174,11 +176,31 @@ def evaluate_topology_rules(
             findings.extend(
                 _minimum_area_issues(source, rule.layer, rule.minimum_area, rule.severity)
             )
-        else:
+        elif rule.rule_type in {
+            TopologyRuleType.MUST_BE_INSIDE,
+            TopologyRuleType.MUST_NOT_INTERSECT,
+        }:
             assert rule.reference_layer is not None
             if rule.reference_layer not in loaded:
                 raise ValueError(f"unknown reference layer: {rule.reference_layer}")
             findings.extend(_cross_layer_issues(source, loaded[rule.reference_layer], rule))
+        else:
+            reference = None
+            reference_attributes: Sequence[Mapping[str, str | int | float | bool | None]] = ()
+            if rule.reference_layer is not None:
+                if rule.reference_layer not in loaded:
+                    raise ValueError(f"unknown reference layer: {rule.reference_layer}")
+                reference = loaded[rule.reference_layer]
+                reference_attributes = attributes[rule.reference_layer]
+            findings.extend(
+                evaluate_advanced_rule(
+                    source,
+                    attributes[rule.layer],
+                    reference,
+                    reference_attributes,
+                    rule,
+                )
+            )
     return tuple(sorted(findings, key=_issue_sort_key))
 
 

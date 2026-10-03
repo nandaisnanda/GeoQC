@@ -2,7 +2,7 @@
 
 import pytest
 from shapely import box, from_wkt
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, MultiLineString, Point, Polygon
 
 import geoqc
 from geoqc.domain.rules import Severity
@@ -63,6 +63,187 @@ def test_custom_cross_layer_rules_find_outside_and_forbidden_intersection() -> N
     issues = geoqc.evaluate_topology_rules(layers, rules)
 
     assert {item.issue_type for item in issues} == {"must_be_inside", "must_not_intersect"}
+
+
+def test_boundary_must_match_reports_only_unmatched_boundary() -> None:
+    layers = (
+        geoqc.DatasetLayer("source", (box(0, 0, 1, 1).wkt,)),
+        geoqc.DatasetLayer("reference", (box(0, 0, 2, 1).wkt,)),
+    )
+    rule = geoqc.TopologyRule(
+        geoqc.TopologyRuleType.BOUNDARY_MUST_MATCH,
+        "source",
+        "reference",
+    )
+
+    issues = geoqc.evaluate_topology_rules(layers, (rule,))
+
+    assert len(issues) == 1
+    assert issues[0].metadata["unmatched_length"] == pytest.approx(1.0)
+    assert from_wkt(issues[0].geometry_wkt).geom_type == "LineString"
+
+
+def test_line_endpoint_rules_distinguish_endpoint_and_line_connections() -> None:
+    layers = (
+        geoqc.DatasetLayer(
+            "roads",
+            (
+                LineString([(0, 0), (1, 0)]).wkt,
+                LineString([(1, -1), (1, 1)]).wkt,
+            ),
+        ),
+    )
+    rules = (
+        geoqc.TopologyRule(geoqc.TopologyRuleType.NO_DANGLES, "roads"),
+        geoqc.TopologyRule(geoqc.TopologyRuleType.ENDPOINT_MUST_CONNECT, "roads"),
+    )
+
+    issues = geoqc.evaluate_topology_rules(layers, rules)
+
+    assert any(
+        item.issue_type == "no_dangles" and from_wkt(item.geometry_wkt).equals(Point(1, 0))
+        for item in issues
+    )
+    assert not any(
+        item.issue_type == "endpoint_must_connect"
+        and from_wkt(item.geometry_wkt).equals(Point(1, 0))
+        for item in issues
+    )
+
+
+def test_detects_line_overshoot_and_undershoot() -> None:
+    layers = (
+        geoqc.DatasetLayer(
+            "roads",
+            (
+                LineString([(0, 0), (1.1, 0)]).wkt,
+                LineString([(1, -1), (1, 1)]).wkt,
+                LineString([(2, 0), (2.9, 0)]).wkt,
+                LineString([(3, -1), (3, 1)]).wkt,
+            ),
+        ),
+    )
+    rule = geoqc.TopologyRule(
+        geoqc.TopologyRuleType.NO_OVERSHOOT_UNDERSHOOT, "roads", tolerance=0.2
+    )
+
+    issues = geoqc.evaluate_topology_rules(layers, (rule,))
+
+    assert {item.metadata["subtype"] for item in issues} == {"overshoot", "undershoot"}
+
+
+def test_geometry_type_and_singlepart_rules() -> None:
+    layers = (
+        geoqc.DatasetLayer(
+            "mixed",
+            (Point(0, 0).wkt, MultiLineString([[(0, 0), (1, 0)], [(2, 0), (3, 0)]]).wkt),
+        ),
+    )
+    rules = (
+        geoqc.TopologyRule(
+            geoqc.TopologyRuleType.ALLOWED_GEOMETRY_TYPE,
+            "mixed",
+            allowed_geometry_types=("Point",),
+        ),
+        geoqc.TopologyRule(geoqc.TopologyRuleType.SINGLEPART_ONLY, "mixed"),
+    )
+
+    issues = geoqc.evaluate_topology_rules(layers, rules)
+
+    assert {item.issue_type for item in issues} == {"allowed_geometry_type", "singlepart_only"}
+
+
+def test_spike_and_minimum_vertex_metrics_are_reported() -> None:
+    polygon = Polygon([(0, 0), (2, 0), (1, 0.01), (2, 2), (0, 2)])
+    layers = (geoqc.DatasetLayer("parcels", (polygon.wkt,)),)
+    rules = (
+        geoqc.TopologyRule(geoqc.TopologyRuleType.NO_SPIKES, "parcels", minimum_angle=5),
+        geoqc.TopologyRule(
+            geoqc.TopologyRuleType.MINIMUM_VERTEX_DISTANCE,
+            "parcels",
+            minimum_distance=1.5,
+        ),
+    )
+
+    issues = geoqc.evaluate_topology_rules(layers, rules)
+
+    assert any(item.issue_type == "no_spikes" for item in issues)
+    assert any(item.issue_type == "minimum_vertex_distance" for item in issues)
+
+
+def test_minimum_segment_length_reports_zero_and_short_segments() -> None:
+    layers = (geoqc.DatasetLayer("lines", (LineString([(0, 0), (0.01, 0), (1, 0)]).wkt,)),)
+    rule = geoqc.TopologyRule(
+        geoqc.TopologyRuleType.MINIMUM_SEGMENT_LENGTH,
+        "lines",
+        minimum_length=0.1,
+    )
+
+    issues = geoqc.evaluate_topology_rules(layers, (rule,))
+
+    assert len(issues) == 1
+    assert issues[0].metadata["segment_length"] == pytest.approx(0.01)
+
+
+@pytest.mark.parametrize(
+    ("rule_type", "source", "reference", "expected"),
+    [
+        (geoqc.TopologyRuleType.MUST_TOUCH, box(0, 0, 1, 1), box(1, 0, 2, 1), 0),
+        (geoqc.TopologyRuleType.MUST_INTERSECT, Point(5, 5), box(0, 0, 1, 1), 1),
+        (geoqc.TopologyRuleType.MUST_COVER, box(0, 0, 3, 3), box(1, 1, 2, 2), 0),
+    ],
+)
+def test_touch_intersect_and_cover_relations(
+    rule_type: geoqc.TopologyRuleType,
+    source: object,
+    reference: object,
+    expected: int,
+) -> None:
+    assert hasattr(source, "wkt") and hasattr(reference, "wkt")
+    layers = (
+        geoqc.DatasetLayer("source", (source.wkt,)),
+        geoqc.DatasetLayer("reference", (reference.wkt,)),
+    )
+    rule = geoqc.TopologyRule(rule_type, "source", "reference")
+
+    assert len(geoqc.evaluate_topology_rules(layers, (rule,))) == expected
+
+
+def test_attribute_driven_overlap_policy_uses_layer_attributes() -> None:
+    layers = (
+        geoqc.DatasetLayer(
+            "zones",
+            (box(0, 0, 2, 2).wkt, box(1, 0, 3, 2).wkt, box(2, 0, 4, 2).wkt),
+            attributes=(({"class": "A"}), ({"class": "A"}), ({"class": "B"})),
+        ),
+    )
+    rule = geoqc.TopologyRule(
+        geoqc.TopologyRuleType.ATTRIBUTE_OVERLAP,
+        "zones",
+        attribute_column="class",
+        overlap_policy=geoqc.AttributeOverlapPolicy.ALLOW_EQUAL,
+    )
+
+    issues = geoqc.evaluate_topology_rules(layers, (rule,))
+
+    assert len(issues) == 1
+    assert issues[0].metadata["source_value"] == "A"
+    assert issues[0].metadata["related_value"] == "B"
+
+
+def test_precision_grid_reports_off_grid_vertices_with_tolerance() -> None:
+    layers = (geoqc.DatasetLayer("survey", (LineString([(0, 0), (1.01, 1)]).wkt,)),)
+    rule = geoqc.TopologyRule(
+        geoqc.TopologyRuleType.PRECISION_GRID,
+        "survey",
+        precision_grid_size=0.1,
+        tolerance=0.001,
+    )
+
+    issues = geoqc.evaluate_topology_rules(layers, (rule,))
+
+    assert len(issues) == 1
+    assert issues[0].metadata["off_grid_vertices"] == 1
 
 
 def test_safe_repair_only_removes_duplicate_vertices() -> None:

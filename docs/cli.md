@@ -34,6 +34,12 @@ dataset fails; failures are isolated and remaining datasets continue. The
 CLI disables pretty tracebacks (`pretty_exceptions_enable=False`) so
 unexpected errors print a plain message instead of an internal stack trace.
 
+`geoqc audit` prints the unified dataset report status and issue count while
+retaining deterministic file/folder discovery, `--recursive`, multiprocessing,
+automatic streaming/in-memory engine selection, benchmarking, and the existing
+exit-code contract. Unconfigured schema/topology/spatial checks appear as
+explicit skips in the underlying report.
+
 ### Profile-driven quality check
 
 Run a complete dataset check with a built-in preset:
