@@ -4,8 +4,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from hashlib import sha256
+from os import PathLike
+from pathlib import Path
 from types import MappingProxyType
+from typing import Protocol
 
+from geoqc.domain.models.dataset_audit import (
+    AuditCheckResult,
+    AuditDatasetMetadata,
+    CheckStatus,
+)
 from geoqc.domain.rules.models import Severity
 
 
@@ -204,6 +212,7 @@ class DatasetIssue:
     feature_id: str | int | None = None
     related_feature_id: str | int | None = None
     metadata: Mapping[str, str | int | float | bool | None] = field(default_factory=dict)
+    check_name: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("code", "issue_type", "title", "message", "category", "recommendation"):
@@ -240,6 +249,40 @@ class DatasetIssue:
         )
         return sha256(identity.encode("utf-8")).hexdigest()[:24]
 
+    def to_dict(self) -> dict[str, object]:
+        """Return the canonical deterministic finding representation."""
+        return {
+            "fingerprint": self.fingerprint,
+            "check_name": self.check_name or self.category,
+            "code": self.code,
+            "issue_type": self.issue_type,
+            "title": self.title,
+            "message": self.message,
+            "severity": self.severity.value,
+            "category": self.category,
+            "recommendation": self.recommendation,
+            "repair_risk": self.repair_risk.value,
+            "geometry_kind": self.geometry_kind.value,
+            "geometry_wkt": self.geometry_wkt,
+            "layer": self.layer,
+            "feature_index": self.feature_index,
+            "related_feature_index": self.related_feature_index,
+            "feature_id": self.feature_id,
+            "related_feature_id": self.related_feature_id,
+            "metadata": dict(self.metadata),
+        }
+
+    @property
+    def feature_indices(self) -> tuple[int, ...]:
+        """Return the affected positional indices in stable order."""
+        return tuple(
+            sorted(
+                index
+                for index in (self.feature_index, self.related_feature_index)
+                if index is not None
+            )
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class CrsGuardResult:
@@ -269,7 +312,7 @@ class ScoreDeduction:
 
 @dataclass(frozen=True, slots=True)
 class ScoringPolicy:
-    """Configurable category weights and per-issue severity penalties."""
+    """Size-normalized scoring inputs with bounded repeated deductions."""
 
     category_weights: Mapping[str, float] = field(
         default_factory=lambda: {
@@ -288,18 +331,26 @@ class ScoringPolicy:
             Severity.CRITICAL: 25.0,
         }
     )
+    category_caps: Mapping[str, float] = field(default_factory=dict)
+    repeated_feature_cap: float = 30.0
 
     def __post_init__(self) -> None:
         weights = dict(self.category_weights)
         penalties = {Severity(key): value for key, value in self.severity_penalties.items()}
+        caps = dict(self.category_caps) or {category: 80.0 for category in weights}
         if not weights or any(value < 0 for value in weights.values()):
             raise ValueError("category weights must be non-negative and non-empty")
         if sum(weights.values()) <= 0:
             raise ValueError("at least one category weight must be positive")
         if set(penalties) != set(Severity) or any(value < 0 for value in penalties.values()):
             raise ValueError("severity penalties must define every severity as non-negative")
+        if set(caps) != set(weights) or any(not 0 <= value <= 100 for value in caps.values()):
+            raise ValueError("category caps must define every category between zero and 100")
+        if not 0 <= self.repeated_feature_cap <= 100:
+            raise ValueError("repeated_feature_cap must be between zero and 100")
         object.__setattr__(self, "category_weights", MappingProxyType(weights))
         object.__setattr__(self, "severity_penalties", MappingProxyType(penalties))
+        object.__setattr__(self, "category_caps", MappingProxyType(caps))
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,8 +366,11 @@ class QualityProfile:
     require_projected_crs: bool = False
     allowed_crs: tuple[str, ...] = ()
     id_column: str | None = None
+    enabled_checks: tuple[str, ...] = ("geometry", "crs", "attributes", "topology", "spatial")
+    expected_geometry_types: tuple[str, ...] = ()
     topology_rules: tuple[TopologyRule, ...] = ()
     attribute_rules: tuple[AttributeRule, ...] = ()
+    severity_overrides: Mapping[str, Severity] = field(default_factory=dict)
     scoring: ScoringPolicy = field(default_factory=ScoringPolicy)
     gate: "QualityGatePolicy" = field(default_factory=lambda: QualityGatePolicy())
 
@@ -329,6 +383,19 @@ class QualityProfile:
             raise ValueError("profile thresholds must be non-negative")
         if self.id_column is not None and not self.id_column.strip():
             raise ValueError("id_column must not be empty when provided")
+        supported = {"geometry", "crs", "attributes", "topology", "spatial"}
+        unknown = set(self.enabled_checks) - supported
+        if not self.enabled_checks or unknown:
+            raise ValueError(f"enabled_checks contains unsupported values: {sorted(unknown)}")
+        if any(not item.strip() for item in self.expected_geometry_types):
+            raise ValueError("expected_geometry_types must not contain empty values")
+        object.__setattr__(
+            self,
+            "severity_overrides",
+            MappingProxyType(
+                {str(key): Severity(value) for key, value in self.severity_overrides.items()}
+            ),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,6 +411,18 @@ class QualityGatePolicy:
             raise ValueError("minimum_score must be between zero and 100")
 
 
+class AuditResultExporter(Protocol):
+    """Output port implemented by infrastructure for an immutable audit result."""
+
+    def json(self, result: "DatasetAuditResult", destination: Path, *, overwrite: bool) -> Path: ...
+
+    def html(self, result: "DatasetAuditResult", destination: Path, *, overwrite: bool) -> Path: ...
+
+    def findings(
+        self, result: "DatasetAuditResult", destination: Path, *, overwrite: bool
+    ) -> Path: ...
+
+
 @dataclass(frozen=True, slots=True)
 class DatasetAuditResult:
     dataset_name: str
@@ -356,10 +435,73 @@ class DatasetAuditResult:
     score_deductions: tuple[ScoreDeduction, ...] = ()
     profile_name: str | None = None
     schema_version: str = "1.0"
+    metadata: AuditDatasetMetadata = field(
+        default_factory=lambda: AuditDatasetMetadata(
+            "", None, "memory", None, 0, "geometry", 0, "in-memory"
+        )
+    )
+    checks: tuple[AuditCheckResult, ...] = ()
+    _exporter: AuditResultExporter | None = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self.feature_count < 0:
+            raise ValueError("feature_count must be non-negative")
+        if not 0 <= self.quality_score <= 100:
+            raise ValueError("quality_score must be between zero and 100")
+        names = tuple(check.name for check in self.checks)
+        if len(names) != len(set(names)):
+            raise ValueError("check names must be unique")
+        if not self.metadata.path and self.metadata.feature_count != self.feature_count:
+            object.__setattr__(
+                self,
+                "metadata",
+                AuditDatasetMetadata(
+                    "",
+                    self.dataset_name,
+                    "memory",
+                    self.crs_guard.crs,
+                    self.feature_count,
+                    "geometry",
+                    0,
+                    "in-memory",
+                ),
+            )
 
     @property
     def is_clean(self) -> bool:
         return not self.issues
+
+    @property
+    def status(self) -> CheckStatus:
+        statuses = {check.status for check in self.checks}
+        if CheckStatus.ERROR in statuses:
+            return CheckStatus.ERROR
+        if CheckStatus.FAILED in statuses:
+            return CheckStatus.FAILED
+        if self.checks and statuses == {CheckStatus.SKIPPED}:
+            return CheckStatus.SKIPPED
+        return CheckStatus.PASSED if self.passes() else CheckStatus.FAILED
+
+    @property
+    def issue_count(self) -> int:
+        return len(self.issues) or sum(check.issue_count for check in self.checks)
+
+    @property
+    def feature_indices(self) -> tuple[int, ...]:
+        indices = {
+            index
+            for issue in self.issues
+            for index in (issue.feature_index, issue.related_feature_index)
+            if index is not None
+        }
+        indices.update(index for check in self.checks for index in check.feature_indices)
+        return tuple(sorted(indices))
+
+    def check(self, name: str) -> AuditCheckResult:
+        selected = next((check for check in self.checks if check.name == name), None)
+        if selected is None:
+            raise KeyError(name)
+        return selected
 
     def issues_for_layer(self, kind: IssueGeometryKind | str) -> tuple[DatasetIssue, ...]:
         """Return findings for one point/line/polygon issue layer."""
@@ -409,29 +551,29 @@ class DatasetAuditResult:
                 }
                 for item in self.score_deductions
             ],
-            "issues": [
-                {
-                    "fingerprint": issue.fingerprint,
-                    "code": issue.code,
-                    "issue_type": issue.issue_type,
-                    "title": issue.title,
-                    "message": issue.message,
-                    "severity": issue.severity.value,
-                    "category": issue.category,
-                    "recommendation": issue.recommendation,
-                    "repair_risk": issue.repair_risk.value,
-                    "geometry_kind": issue.geometry_kind.value,
-                    "geometry_wkt": issue.geometry_wkt,
-                    "layer": issue.layer,
-                    "feature_index": issue.feature_index,
-                    "related_feature_index": issue.related_feature_index,
-                    "feature_id": issue.feature_id,
-                    "related_feature_id": issue.related_feature_id,
-                    "metadata": dict(issue.metadata),
-                }
-                for issue in self.issues
-            ],
+            "issues": [issue.to_dict() for issue in self.issues],
+            "metadata": self.metadata.to_dict(),
+            "checks": [check.to_dict() for check in self.checks],
         }
+
+    def to_json(self, destination: str | PathLike[str], *, overwrite: bool = False) -> None:
+        """Atomically write the versioned deterministic JSON representation."""
+        self._require_exporter().json(self, Path(destination), overwrite=overwrite)
+
+    def to_html(self, destination: str | PathLike[str], *, overwrite: bool = False) -> None:
+        """Atomically render this result through GeoQC's existing HTML renderer."""
+        self._require_exporter().html(self, Path(destination), overwrite=overwrite)
+
+    def write_findings(self, destination: str | PathLike[str], *, overwrite: bool = False) -> None:
+        """Atomically write finding layers to a GeoPackage."""
+        self._require_exporter().findings(self, Path(destination), overwrite=overwrite)
+
+    def _require_exporter(self) -> AuditResultExporter:
+        if self._exporter is None:
+            raise RuntimeError(
+                "Exports require a file audit result returned by geoqc.audit_dataset()."
+            )
+        return self._exporter
 
 
 @dataclass(frozen=True, slots=True)
