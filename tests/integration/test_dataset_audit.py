@@ -25,7 +25,8 @@ def test_public_audit_dataset_combines_services_and_explicit_skips(tmp_path: Pat
         id_column="id",
     )
 
-    report = geoqc.audit_dataset(source, layer=None, schema=schema, checks="all")
+    with pytest.warns(DeprecationWarning, match="schema/checks/chunk_size are deprecated"):
+        report = geoqc.audit_dataset(source, layer=None, schema=schema, checks="all")
 
     assert report.metadata.layer == "points"
     assert report.metadata.feature_count == 2
@@ -58,10 +59,18 @@ def test_check_selection_is_explicit_and_invalid_names_are_rejected(tmp_path: Pa
     source = tmp_path / "selected.gpkg"
     gpd.GeoDataFrame(geometry=[Point(0, 0)], crs="EPSG:3857").to_file(source, driver="GPKG")
 
-    report = geoqc.audit_dataset(source, checks=("geometry",))
+    with pytest.warns(DeprecationWarning, match="schema/checks/chunk_size are deprecated"):
+        report = geoqc.audit_dataset(source, checks=("geometry",))
 
     assert report.check("geometry").status is geoqc.CheckStatus.PASSED
     assert report.check("crs").status is geoqc.CheckStatus.SKIPPED
-    assert "not selected" in (report.check("crs").reason or "")
-    with pytest.raises(ValueError, match="unknown audit checks"):
+    assert report.check("crs").reason == "Check not selected by quality profile."
+    canonical = geoqc.audit_dataset(
+        source, profile=geoqc.QualityProfile(name="geometry-only", enabled_checks=("geometry",))
+    )
+    assert canonical.check("crs").reason == report.check("crs").reason
+    with (
+        pytest.raises(ValueError, match="unknown audit checks"),
+        pytest.warns(DeprecationWarning, match="schema/checks/chunk_size are deprecated"),
+    ):
         geoqc.audit_dataset(source, checks=("imaginary",))

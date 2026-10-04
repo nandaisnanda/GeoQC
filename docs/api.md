@@ -168,3 +168,8 @@ path with no configurable base URL, so it must be served from the same
 origin as the API (directly, or via a reverse proxy that unifies both). Do
 not expose the Vite development server (`npm run dev`) publicly; build a
 static bundle with `npm run build` for anything beyond local development.
+
+The canonical application is `geoqc.interfaces.api.app:app`. The historical
+`geoqc.interfaces.api.main:app` import resolves to the same application.
+Geometry and spatial routers share strict request models and bounded upload
+validation; there is no separate legacy endpoint implementation.

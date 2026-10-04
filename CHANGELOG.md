@@ -6,6 +6,14 @@ All notable changes to GeoQC are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- Modular dataset auditing, profile validation, scoring, exports, and legacy wrappers
+  now share a single implementation. The historical API entry point re-exports
+  the canonical router-based application.
+- Disabled checks consistently report `Check not selected by quality profile.`
+  Legacy argument and wrapper deprecations are explicitly tested.
+
 ### Added
 
 - Public `geoqc.audit_dataset()` workflow with deterministic dataset metadata,

@@ -1,26 +1,50 @@
 """Geometry validation and repair HTTP routes."""
 
-from dataclasses import asdict
+import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import shapely
 from fastapi import APIRouter, HTTPException
-from shapely.geometry import GeometryCollection
+from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
+from shapely.errors import GEOSException
 
 from geoqc import repair_geometries
+from geoqc.application.streaming.geometry import GeometryAuditResult
 from geoqc.application.streaming.models import DatasetSource
+from geoqc.domain.exceptions import GeoQCError
 from geoqc.infrastructure.gis.automatic_geometry_engine import AutomaticGeometryEngine
 from geoqc.infrastructure.gis.streaming import default_reader_registry
-from geoqc.interfaces.api.dataset_io import _frame_geometries, _frame_geojson, _read_frame
-from geoqc.interfaces.api.request_models import GeospatialRepairRequest, GeospatialRepairResponse, GeospatialValidationRequest, GeospatialValidationResponse
-from geoqc.interfaces.api.settings import MAX_REPAIR_FEATURES as _MAX_REPAIR_FEATURES, MAX_REPORTED_FEATURES as _MAX_REPORTED_FEATURES, STREAMING_CHUNK_SIZE as _STREAMING_CHUNK_SIZE
-from geoqc.interfaces.api.upload_security import _decode_components, _resolve_layer, _validate_component_set, _verify_dataset
+from geoqc.interfaces.api.dataset_io import _frame_geojson, _frame_geometries, _read_frame
+from geoqc.interfaces.api.request_models import (
+    GeometryFindingResponse,
+    GeometryIssueResponse,
+    GeospatialRepairRequest,
+    GeospatialRepairResponse,
+    GeospatialValidationRequest,
+    GeospatialValidationResponse,
+    RepairActionResponse,
+    RepairFeatureResponse,
+)
+from geoqc.interfaces.api.settings import MAX_FEATURES as _MAX_FEATURES
+from geoqc.interfaces.api.settings import MAX_REPORTED_FEATURES as _MAX_REPORTED_FEATURES
+from geoqc.interfaces.api.settings import STREAMING_CHUNK_SIZE as _STREAMING_CHUNK_SIZE
+from geoqc.interfaces.api.upload_security import (
+    _decode_components,
+    _resolve_layer,
+    _validate_component_set,
+    _verify_dataset,
+)
 
+LOGGER = logging.getLogger(__name__)
 router = APIRouter()
 
+
 @router.post("/api/geometry/validate", response_model=GeospatialValidationResponse)
-@router.post("/api/geometry/validate-shapefile", response_model=GeospatialValidationResponse, include_in_schema=False)
+@router.post(
+    "/api/geometry/validate-shapefile",
+    response_model=GeospatialValidationResponse,
+    include_in_schema=False,
+)
 def validate_geospatial(payload: GeospatialValidationRequest) -> GeospatialValidationResponse:
     """Validate every geometry in one bounded, allowlisted geospatial dataset."""
     components = _decode_components(payload.files)
@@ -55,8 +79,15 @@ def validate_geospatial(payload: GeospatialValidationRequest) -> GeospatialValid
                 )
         except HTTPException:
             raise
-        except Exception as error:
-            LOGGER.warning("Geospatial upload could not be read", exc_info=error)
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            DataSourceError,
+            GEOSException,
+            GeoQCError,
+        ) as error:
+            LOGGER.warning("Geospatial upload could not be read")
             raise HTTPException(
                 status_code=422,
                 detail="The geospatial dataset could not be read or has an invalid format.",
@@ -81,6 +112,7 @@ def validate_geospatial(payload: GeospatialValidationRequest) -> GeospatialValid
         findings_truncated=audit.invalid_feature_count > len(audit.findings),
     )
 
+
 @router.post("/api/geometry/repair", response_model=GeospatialRepairResponse)
 def repair_geospatial(payload: GeospatialRepairRequest) -> GeospatialRepairResponse:
     """Preview a safe repair for every geometry in one bounded coverage."""
@@ -99,8 +131,15 @@ def repair_geospatial(payload: GeospatialRepairRequest) -> GeospatialRepairRespo
             coverage = repair_geometries(geometries, payload.options.to_domain())
         except HTTPException:
             raise
-        except Exception as error:
-            LOGGER.warning("Geospatial dataset could not be repaired", exc_info=error)
+        except (
+            OSError,
+            ValueError,
+            RuntimeError,
+            DataSourceError,
+            GEOSException,
+            GeoQCError,
+        ) as error:
+            LOGGER.warning("Geospatial dataset could not be repaired")
             raise HTTPException(
                 status_code=422,
                 detail="The geospatial dataset could not be read or has an invalid format.",
@@ -150,4 +189,3 @@ def repair_geospatial(payload: GeospatialRepairRequest) -> GeospatialRepairRespo
         original_geojson=_frame_geojson(frame, coverage.before_wkt),
         repaired_geojson=_frame_geojson(frame, coverage.after_wkt),
     )
-

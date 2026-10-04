@@ -5,20 +5,32 @@ import binascii
 from dataclasses import dataclass
 from pathlib import Path
 
-import geopandas as gpd  # type: ignore[import-untyped]
 import pyogrio  # type: ignore[import-untyped]
 from fastapi import HTTPException
 
 from geoqc.interfaces.api.request_models import UploadedFile
 from geoqc.interfaces.api.settings import (
     ALLOWED_SHAPEFILE_SUFFIXES as _ALLOWED_SHAPEFILE_SUFFIXES,
+)
+from geoqc.interfaces.api.settings import (
     MAX_DECODED_UPLOAD_BYTES as _MAX_DECODED_UPLOAD_BYTES,
+)
+from geoqc.interfaces.api.settings import (
     MAX_ENCODED_UPLOAD_CHARS as _MAX_ENCODED_UPLOAD_CHARS,
+)
+from geoqc.interfaces.api.settings import (
     MAX_FEATURES as _MAX_FEATURES,
+)
+from geoqc.interfaces.api.settings import (
     REQUIRED_SHAPEFILE_SUFFIXES as _REQUIRED_SHAPEFILE_SUFFIXES,
+)
+from geoqc.interfaces.api.settings import (
     SINGLE_FILE_DRIVERS as _SINGLE_FILE_DRIVERS,
+)
+from geoqc.interfaces.api.settings import (
     WINDOWS_RESERVED_NAMES as _WINDOWS_RESERVED_NAMES,
 )
+
 
 @dataclass(frozen=True, slots=True)
 class _DatasetSelection:
@@ -26,6 +38,7 @@ class _DatasetSelection:
 
     filename: str
     layer: str | None = None
+
 
 def _decode_components(files: list[UploadedFile]) -> dict[str, bytes]:
     """Decode a bounded set of safe, uniquely named upload components."""
@@ -53,6 +66,7 @@ def _decode_components(files: list[UploadedFile]) -> dict[str, bytes]:
         components[normalized_name] = content
     return components
 
+
 def _validate_filename(name: str) -> None:
     """Reject traversal, Windows device names, ADS paths, and ambiguous names."""
     path = Path(name)
@@ -64,6 +78,7 @@ def _validate_filename(name: str) -> None:
         or path.stem.casefold() in _WINDOWS_RESERVED_NAMES
     ):
         raise HTTPException(status_code=400, detail=f"Unsafe filename: {name}")
+
 
 def _validate_component_set(
     components: dict[str, bytes], requested_layer: str | None
@@ -102,6 +117,7 @@ def _validate_component_set(
         raise HTTPException(status_code=400, detail=f"Unsupported extension: {shown_suffix}")
     return _DatasetSelection(names[0], requested_layer)
 
+
 def _resolve_layer(dataset_path: Path, requested_layer: str | None) -> str | None:
     """Resolve a layer without silently choosing from an ambiguous container."""
     if dataset_path.suffix != ".gpkg":
@@ -123,6 +139,7 @@ def _resolve_layer(dataset_path: Path, requested_layer: str | None) -> str | Non
             detail="The GeoPackage has multiple layers; specify the layer parameter.",
         )
     return available_layers[0]
+
 
 def _verify_dataset(dataset_path: Path, layer: str | None) -> None:
     """Verify the detected GDAL driver and reject oversized datasets before loading."""
