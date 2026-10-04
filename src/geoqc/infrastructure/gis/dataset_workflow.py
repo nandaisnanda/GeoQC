@@ -1,9 +1,10 @@
 """File, GeoDataFrame, profile, output, and repair-plan QC orchestration."""
 
 import json
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from math import isnan
+from math import isfinite, isnan
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -21,6 +22,9 @@ from geoqc.domain.models import (
     AttributeOverlapPolicy,
     AttributeRule,
     AttributeRuleType,
+    AuditCheckResult,
+    AuditDatasetMetadata,
+    CheckStatus,
     DatasetAuditResult,
     DatasetIssue,
     DatasetLayer,
@@ -37,9 +41,10 @@ from geoqc.domain.models import (
     TopologyRuleType,
     WorkflowArtifacts,
 )
+from geoqc.domain.models.quality_workflow import AuditResultExporter
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.quality_workflow import (
-    audit_dataset,
+    audit_geometries,
     evaluate_topology_rules,
     issues_to_geodataframe,
     score_issues,
@@ -57,6 +62,41 @@ _STRATEGIES = {
     "unnoded_intersection": "node_intersection",
     "duplicate_segment": "remove_duplicate_segment",
 }
+_BUILTIN_PROFILES = {
+    "parcel": QualityProfile(
+        name="parcel",
+        preset=QualityPreset.PARCEL,
+        expected_geometry_types=("Polygon", "MultiPolygon"),
+        require_crs=True,
+        require_projected_crs=True,
+    ),
+    "road-network": QualityProfile(
+        name="road-network",
+        preset=QualityPreset.ROAD,
+        expected_geometry_types=("LineString", "MultiLineString"),
+        require_crs=True,
+        require_projected_crs=True,
+    ),
+    "administrative-boundary": QualityProfile(
+        name="administrative-boundary",
+        preset=QualityPreset.ADMIN_BOUNDARY,
+        expected_geometry_types=("Polygon", "MultiPolygon"),
+        require_crs=True,
+        require_projected_crs=True,
+    ),
+}
+_DEFAULT_PROFILE = QualityProfile(name="default", require_crs=True)
+
+
+class _ResultExporter(AuditResultExporter):
+    def json(self, result: DatasetAuditResult, destination: Path, *, overwrite: bool) -> Path:
+        return write_audit_report(result, destination, overwrite=overwrite)
+
+    def html(self, result: DatasetAuditResult, destination: Path, *, overwrite: bool) -> Path:
+        return write_audit_report(result, destination, overwrite=overwrite)
+
+    def findings(self, result: DatasetAuditResult, destination: Path, *, overwrite: bool) -> Path:
+        return write_issue_layers(result, destination, overwrite=overwrite)
 
 
 def load_quality_profile(source: str | Path) -> QualityProfile:
@@ -85,9 +125,13 @@ def quality_profile_from_dict(raw: Mapping[str, object]) -> QualityProfile:
         "preset",
         "tolerance",
         "minimum_area",
+        "enabled_checks",
+        "expected_geometry_types",
         "crs",
         "topology_rules",
         "attribute_rules",
+        "attribute_schema",
+        "severity_overrides",
         "scoring",
         "quality_gate",
     }
@@ -97,6 +141,17 @@ def quality_profile_from_dict(raw: Mapping[str, object]) -> QualityProfile:
     crs = _mapping(raw.get("crs", {}), "crs")
     scoring_raw = _mapping(raw.get("scoring", {}), "scoring")
     gate_raw = _mapping(raw.get("quality_gate", {}), "quality_gate")
+    _reject_unknown(crs, {"required", "require_projected", "allowed"}, "crs")
+    _reject_unknown(
+        scoring_raw,
+        {"category_weights", "severity_penalties", "category_caps", "repeated_feature_cap"},
+        "scoring",
+    )
+    _reject_unknown(
+        gate_raw,
+        {"minimum_score", "fail_on", "allow_unknown_crs"},
+        "quality_gate",
+    )
     weights = scoring_raw.get("category_weights")
     penalties = scoring_raw.get("severity_penalties")
     scoring = ScoringPolicy(
@@ -116,30 +171,68 @@ def quality_profile_from_dict(raw: Mapping[str, object]) -> QualityProfile:
             if penalties is not None
             else ScoringPolicy().severity_penalties
         ),
+        category_caps=(
+            {
+                str(key): _number(value, f"category cap {key}")
+                for key, value in _mapping(scoring_raw["category_caps"], "category_caps").items()
+            }
+            if "category_caps" in scoring_raw
+            else {}
+        ),
+        repeated_feature_cap=_number(
+            scoring_raw.get("repeated_feature_cap", 30.0), "scoring.repeated_feature_cap"
+        ),
     )
+    attribute_raw = raw.get("attribute_schema", raw.get("attribute_rules", ()))
+    if "attribute_schema" in raw and "attribute_rules" in raw:
+        raise ValueError("use attribute_schema; do not also provide attribute_rules")
     return QualityProfile(
         name=str(raw.get("name", "")).strip(),
         version=_integer(raw.get("version", 1), "version"),
         preset=QualityPreset(str(raw["preset"])) if raw.get("preset") is not None else None,
         tolerance=_number(raw.get("tolerance", 0.0), "tolerance"),
         minimum_area=_number(raw.get("minimum_area", 0.0), "minimum_area"),
-        require_crs=bool(crs.get("required", True)),
-        require_projected_crs=bool(crs.get("require_projected", False)),
+        require_crs=_boolean(crs.get("required", True), "crs.required"),
+        require_projected_crs=_boolean(
+            crs.get("require_projected", False), "crs.require_projected"
+        ),
         allowed_crs=tuple(str(item) for item in _sequence(crs.get("allowed", ()), "crs.allowed")),
         id_column=str(raw["id_column"]) if raw.get("id_column") is not None else None,
+        enabled_checks=tuple(
+            str(item)
+            for item in _sequence(
+                raw.get(
+                    "enabled_checks",
+                    ("geometry", "crs", "attributes", "topology", "spatial"),
+                ),
+                "enabled_checks",
+            )
+        ),
+        expected_geometry_types=tuple(
+            str(item)
+            for item in _sequence(raw.get("expected_geometry_types", ()), "expected_geometry_types")
+        ),
         topology_rules=tuple(
             _topology_rule(_mapping(item, "topology rule"))
             for item in _sequence(raw.get("topology_rules", ()), "topology_rules")
         ),
         attribute_rules=tuple(
             _attribute_rule(_mapping(item, "attribute rule"))
-            for item in _sequence(raw.get("attribute_rules", ()), "attribute_rules")
+            for item in _sequence(attribute_raw, "attribute_schema")
         ),
+        severity_overrides={
+            str(key): Severity(str(value))
+            for key, value in _mapping(
+                raw.get("severity_overrides", {}), "severity_overrides"
+            ).items()
+        },
         scoring=scoring,
         gate=QualityGatePolicy(
             minimum_score=_number(gate_raw.get("minimum_score", 75.0), "minimum_score"),
             fail_on=Severity(str(gate_raw.get("fail_on", "error"))),
-            allow_unknown_crs=bool(gate_raw.get("allow_unknown_crs", False)),
+            allow_unknown_crs=_boolean(
+                gate_raw.get("allow_unknown_crs", False), "quality_gate.allow_unknown_crs"
+            ),
         ),
     )
 
@@ -171,19 +264,25 @@ def audit_geodataframe(
     if frame.geometry.name not in frame.columns:
         raise ValueError("frame must have an active geometry column")
     selected_preset = profile.preset if profile is not None else preset
+    if profile is not None and profile.expected_geometry_types:
+        allowed_types = {item.casefold() for item in profile.expected_geometry_types}
+        if any(geometry.geom_type.casefold() not in allowed_types for geometry in frame.geometry):
+            selected_preset = None
     crs = frame.crs.to_string() if frame.crs is not None else None
-    base = audit_dataset(
+    metric_safe = profile is None or _metric_skip_reason(frame, profile) is None
+    base = audit_geometries(
         tuple(frame.geometry),
         dataset_name=dataset_name,
         preset=selected_preset,
         crs=crs,
-        tolerance=profile.tolerance if profile else 0.0,
-        minimum_area=profile.minimum_area if profile else 0.0,
+        tolerance=profile.tolerance if profile and metric_safe else 0.0,
+        minimum_area=profile.minimum_area if profile and metric_safe else 0.0,
         scoring=profile.scoring if profile else None,
         profile_name=profile.name if profile else None,
     )
     issues = list(base.issues)
     if profile is not None:
+        issues.extend(_geometry_type_issues(frame, dataset_name, profile))
         issues.extend(_attribute_issues(frame, dataset_name, profile.attribute_rules))
         issues.extend(_crs_issues(frame, dataset_name, profile))
         local_rules = tuple(
@@ -191,7 +290,7 @@ def audit_geodataframe(
             for rule in profile.topology_rules
             if rule.layer == dataset_name and rule.reference_layer is None
         )
-        if local_rules:
+        if local_rules and _metric_skip_reason(frame, profile) is None:
             layer = DatasetLayer(
                 dataset_name,
                 tuple(_wkt(item) for item in frame.geometry),
@@ -200,7 +299,50 @@ def audit_geodataframe(
             )
             issues.extend(evaluate_topology_rules((layer,), local_rules))
         issues = _attach_feature_ids(issues, frame, profile.id_column)
+        issues = [
+            replace(
+                issue,
+                severity=profile.severity_overrides.get(
+                    issue.code,
+                    profile.severity_overrides.get(issue.category, issue.severity),
+                ),
+            )
+            for issue in issues
+            if _check_name(issue.category) in profile.enabled_checks
+        ]
     return _rebuild_result(base, issues, profile.scoring if profile else None)
+
+
+def audit_dataset(
+    source: str | Path,
+    *,
+    layer: str | None = None,
+    profile: QualityProfile | str | Path | None = None,
+    preset: QualityPreset | str | None = None,
+    schema: object | None = None,
+    checks: str | Sequence[str] = "all",
+    chunk_size: int = 16_384,
+) -> DatasetAuditResult:
+    """Canonical file-based dataset QC entry point used by Python and CLI."""
+    if schema is not None or checks != "all" or chunk_size != 16_384:
+        warnings.warn(
+            "schema/checks/chunk_size are deprecated audit_dataset arguments; migrate "
+            "them to a QualityProfile.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from geoqc.infrastructure.gis.dataset_audit import _audit_dataset_with_geometry
+
+        legacy, _, _ = _audit_dataset_with_geometry(
+            source,
+            layer=layer,
+            schema=schema,  # type: ignore[arg-type]
+            checks=checks,
+            chunk_size=chunk_size,
+        )
+        return legacy
+    selected_profile = _resolve_profile(profile)
+    return _audit_file_impl(source, layer=layer, profile=selected_profile, preset=preset)
 
 
 def audit_file(
@@ -210,7 +352,22 @@ def audit_file(
     profile: QualityProfile | None = None,
     preset: QualityPreset | str | None = None,
 ) -> DatasetAuditResult:
-    """Read one supported vector dataset and run the unified audit."""
+    """Deprecated alias for :func:`audit_dataset`."""
+    warnings.warn(
+        "audit_file() is deprecated; use geoqc.audit_dataset() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return _audit_file_impl(source, layer=layer, profile=profile, preset=preset)
+
+
+def _audit_file_impl(
+    source: str | Path,
+    *,
+    layer: str | None,
+    profile: QualityProfile | None,
+    preset: QualityPreset | str | None,
+) -> DatasetAuditResult:
     path = Path(source)
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -228,12 +385,169 @@ def audit_file(
         frame = gpd.read_parquet(path)
     else:
         frame = gpd.read_file(path, layer=selected_layer)
-    return audit_geodataframe(
+    result = audit_geodataframe(
         frame,
         dataset_name=selected_layer or path.stem,
         profile=profile,
         preset=preset,
     )
+    metadata = AuditDatasetMetadata(
+        path=str(path.resolve()),
+        layer=selected_layer,
+        driver=path.suffix.lstrip(".").upper(),
+        crs=frame.crs.to_string() if frame.crs is not None else None,
+        feature_count=len(frame),
+        geometry_column=frame.geometry.name,
+        size_bytes=path.stat().st_size,
+        engine="geopandas",
+    )
+    return replace(
+        result,
+        metadata=metadata,
+        checks=_checks_for_result(result, profile),
+        _exporter=_ResultExporter(),
+    )
+
+
+def _resolve_profile(profile: QualityProfile | str | Path | None) -> QualityProfile | None:
+    if profile is None:
+        return _DEFAULT_PROFILE
+    if isinstance(profile, QualityProfile):
+        return profile
+    key = str(profile).casefold()
+    if key in _BUILTIN_PROFILES:
+        return _BUILTIN_PROFILES[key]
+    return load_quality_profile(profile)
+
+
+def _checks_for_result(
+    result: DatasetAuditResult, profile: QualityProfile | None
+) -> tuple[AuditCheckResult, ...]:
+    groups = {
+        "geometry": tuple(issue for issue in result.issues if issue.category == "geometry"),
+        "crs": tuple(issue for issue in result.issues if issue.category == "metadata"),
+        "attributes": tuple(issue for issue in result.issues if issue.category == "attribute"),
+        "topology": tuple(
+            issue for issue in result.issues if issue.category in {"topology", "network"}
+        ),
+        "spatial": tuple(issue for issue in result.issues if issue.category == "spatial"),
+    }
+    checks_out: list[AuditCheckResult] = []
+    for name, issues in groups.items():
+        if profile is not None and name not in profile.enabled_checks:
+            checks_out.append(
+                AuditCheckResult(name, CheckStatus.SKIPPED, reason="Disabled by quality profile.")
+            )
+        elif name == "attributes" and (profile is None or not profile.attribute_rules):
+            checks_out.append(
+                AuditCheckResult(
+                    name, CheckStatus.SKIPPED, reason="No attribute schema configured."
+                )
+            )
+        elif (
+            name == "topology"
+            and profile is not None
+            and _profile_needs_metric_crs(profile)
+            and (result.crs_guard.crs is None or result.crs_guard.uses_angular_units)
+        ):
+            checks_out.append(
+                AuditCheckResult(
+                    name,
+                    CheckStatus.SKIPPED,
+                    reason=(
+                        "Metric topology thresholds require a projected CRS. Define or "
+                        "transform the dataset CRS, then run the audit again."
+                    ),
+                )
+            )
+        elif name in {"topology", "spatial"} and (
+            profile is None
+            or (name == "topology" and not profile.topology_rules and profile.preset is None)
+            or name == "spatial"
+        ):
+            reason = (
+                "Dataset CRS is missing. Define a projected CRS and configure the required "
+                f"{name} rules before running this check."
+                if result.crs_guard.crs is None
+                else f"No {name} rules were configured."
+            )
+            checks_out.append(AuditCheckResult(name, CheckStatus.SKIPPED, reason=reason))
+        else:
+            checks_out.append(
+                AuditCheckResult(
+                    name,
+                    CheckStatus.FAILED if issues else CheckStatus.PASSED,
+                    issues,
+                )
+            )
+    return tuple(checks_out)
+
+
+def _check_name(category: str) -> str:
+    return {
+        "attribute": "attributes",
+        "metadata": "crs",
+        "network": "topology",
+    }.get(category, category)
+
+
+def _profile_needs_metric_crs(profile: QualityProfile) -> bool:
+    if profile.tolerance > 0 or profile.minimum_area > 0:
+        return True
+    return any(
+        value > 0
+        for rule in profile.topology_rules
+        for value in (
+            rule.tolerance,
+            rule.minimum_area,
+            rule.minimum_length,
+            rule.minimum_distance,
+            rule.precision_grid_size,
+        )
+    )
+
+
+def _metric_skip_reason(frame: gpd.GeoDataFrame, profile: QualityProfile) -> str | None:
+    if not _profile_needs_metric_crs(profile):
+        return None
+    if frame.crs is None:
+        return "Metric thresholds require a defined projected CRS."
+    if CRS.from_user_input(frame.crs).is_geographic:
+        return "Metric thresholds require a projected CRS, not angular units."
+    return None
+
+
+def _geometry_type_issues(
+    frame: gpd.GeoDataFrame, layer: str, profile: QualityProfile
+) -> list[DatasetIssue]:
+    if not profile.expected_geometry_types:
+        return []
+    allowed = {item.casefold() for item in profile.expected_geometry_types}
+    issues: list[DatasetIssue] = []
+    for index, geometry in enumerate(frame.geometry):
+        if geometry.geom_type.casefold() not in allowed:
+            issues.append(
+                DatasetIssue(
+                    code="GEO-UNEXPECTED-TYPE",
+                    issue_type="unexpected_geometry_type",
+                    title="Unexpected Geometry Type",
+                    message=f"{geometry.geom_type} is not allowed by the profile.",
+                    severity=Severity.ERROR,
+                    category="geometry",
+                    recommendation=(
+                        "Convert the feature to one of: "
+                        + ", ".join(profile.expected_geometry_types)
+                        + "."
+                    ),
+                    repair_risk=RepairRisk.REVIEW,
+                    geometry_kind=_kind(geometry),
+                    geometry_wkt=_wkt(geometry),
+                    layer=layer,
+                    feature_index=index,
+                    check_name="geometry",
+                )
+            )
+    return issues
 
 
 def audit_layers(
@@ -337,11 +651,18 @@ def build_repair_plan(result: DatasetAuditResult) -> RepairPlan:
     return RepairPlan(actions, conflicts)
 
 
-def write_audit_report(result: DatasetAuditResult, destination: str | Path) -> Path:
+def write_audit_report(
+    result: DatasetAuditResult,
+    destination: str | Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
     """Write JSON or self-contained HTML directly from a unified audit result."""
     path = Path(destination)
+    if path.exists() and not overwrite:
+        raise FileExistsError(path)
     if path.suffix.casefold() == ".json":
-        _atomic_text(path, json.dumps(result.to_dict(), indent=2))
+        _atomic_text(path, json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n")
         return path
     if path.suffix.casefold() == ".html":
         from geoqc import build_quality_report
@@ -367,10 +688,18 @@ def run_quality_workflow(
     report_output: str | Path | None = None,
     overwrite: bool = False,
 ) -> WorkflowArtifacts:
-    """Run audit and optional outputs with one package-level call."""
-    result = audit_file(source, layer=layer, profile=profile)
+    """Deprecated orchestration wrapper around the canonical result methods."""
+    warnings.warn(
+        "run_quality_workflow() is deprecated; call geoqc.audit_dataset() and the "
+        "result export methods instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    result = audit_dataset(source, layer=layer, profile=profile)
     issues = write_issue_layers(result, issue_output, overwrite=overwrite) if issue_output else None
-    report = write_audit_report(result, report_output) if report_output else None
+    report = (
+        write_audit_report(result, report_output, overwrite=overwrite) if report_output else None
+    )
     return WorkflowArtifacts(
         result=result,
         issue_dataset=str(issues.resolve()) if issues else None,
@@ -510,7 +839,9 @@ def _metadata_issue(
         message=message,
         severity=Severity.ERROR,
         category="metadata",
-        recommendation="Assign or transform to a CRS allowed by the quality profile.",
+        recommendation=(
+            "Define a valid projected CRS, or transform to a CRS allowed by the quality profile."
+        ),
         repair_risk=RepairRisk.NOT_REPAIRABLE,
         geometry_kind=_kind(geometry),
         geometry_wkt=_wkt(geometry),
@@ -548,6 +879,25 @@ def _rebuild_result(
 
 
 def _topology_rule(raw: Mapping[str, object]) -> TopologyRule:
+    _reject_unknown(
+        raw,
+        {
+            "type",
+            "layer",
+            "reference_layer",
+            "tolerance",
+            "minimum_area",
+            "minimum_length",
+            "minimum_distance",
+            "minimum_angle",
+            "allowed_geometry_types",
+            "precision_grid_size",
+            "attribute_column",
+            "overlap_policy",
+            "severity",
+        },
+        "topology rule",
+    )
     return TopologyRule(
         rule_type=TopologyRuleType(str(raw.get("type", ""))),
         layer=str(raw.get("layer", "")),
@@ -575,6 +925,11 @@ def _topology_rule(raw: Mapping[str, object]) -> TopologyRule:
 
 
 def _attribute_rule(raw: Mapping[str, object]) -> AttributeRule:
+    _reject_unknown(
+        raw,
+        {"column", "type", "severity", "allowed_values", "minimum", "maximum"},
+        "attribute schema rule",
+    )
     return AttributeRule(
         column=str(raw.get("column", "")),
         rule_type=AttributeRuleType(str(raw.get("type", ""))),
@@ -594,6 +949,8 @@ def _profile_dict(profile: QualityProfile) -> dict[str, object]:
         "name": profile.name,
         "version": profile.version,
         "id_column": profile.id_column,
+        "enabled_checks": list(profile.enabled_checks),
+        "expected_geometry_types": list(profile.expected_geometry_types),
         "preset": profile.preset.value if profile.preset else None,
         "tolerance": profile.tolerance,
         "minimum_area": profile.minimum_area,
@@ -620,7 +977,7 @@ def _profile_dict(profile: QualityProfile) -> dict[str, object]:
             }
             for item in profile.topology_rules
         ],
-        "attribute_rules": [
+        "attribute_schema": [
             {
                 "type": item.rule_type.value,
                 "column": item.column,
@@ -636,6 +993,11 @@ def _profile_dict(profile: QualityProfile) -> dict[str, object]:
             "severity_penalties": {
                 key.value: value for key, value in profile.scoring.severity_penalties.items()
             },
+            "category_caps": dict(profile.scoring.category_caps),
+            "repeated_feature_cap": profile.scoring.repeated_feature_cap,
+        },
+        "severity_overrides": {
+            key: value.value for key, value in profile.severity_overrides.items()
         },
         "quality_gate": {
             "minimum_score": profile.gate.minimum_score,
@@ -661,9 +1023,24 @@ def _number(value: object, name: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         raise ValueError(f"{name} must be numeric")
     try:
-        return float(value)
+        number = float(value)
     except ValueError as error:
         raise ValueError(f"{name} must be numeric") from error
+    if not isfinite(number):
+        raise ValueError(f"{name} must be finite")
+    return number
+
+
+def _boolean(value: object, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean")
+    return value
+
+
+def _reject_unknown(value: Mapping[str, object], allowed: set[str], name: str) -> None:
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ValueError(f"{name} contains unknown fields: {unknown}")
 
 
 def _integer(value: object, name: str) -> int:
