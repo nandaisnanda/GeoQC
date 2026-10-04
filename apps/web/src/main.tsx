@@ -226,7 +226,7 @@ function Icon({ path, size = 20 }: { path: ReactNode; size?: number }): JSX.Elem
   );
 }
 
-function App(): JSX.Element {
+export function App(): JSX.Element {
   const [files, setFiles] = useState<File[]>([]);
   const [result, setResult] = useState<ValidationResult | null>(null);
   const [repairResult, setRepairResult] = useState<RepairResult | null>(null);
@@ -726,12 +726,10 @@ function RepairReport({
 
 const rootElement: HTMLElement | null = document.getElementById("root");
 
-if (rootElement === null) {
-  throw new Error("GeoQC root element was not found.");
+if (rootElement !== null) {
+  createRoot(rootElement).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
 }
-
-createRoot(rootElement).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);

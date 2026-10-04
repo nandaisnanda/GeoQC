@@ -183,19 +183,18 @@ def audit(
             typer.echo(f"FAILED {item.source}: {item.error}")
             continue
         audit_result = item.value.result
-        report_suffix = (
-            f" status={item.value.report.status.value} issues={item.value.report.issue_count}"
-            if item.value.report is not None
-            else ""
+        invalid_count = len(
+            [issue for issue in audit_result.issues if issue.category == "geometry"]
         )
-        quality_passed = item.value.report is None or (
-            item.value.report.status not in {CheckStatus.FAILED, CheckStatus.ERROR}
-            and item.value.report.passes()
+        report_suffix = f" status={audit_result.status.value} issues={audit_result.issue_count}"
+        quality_passed = (
+            audit_result.status not in {CheckStatus.FAILED, CheckStatus.ERROR}
+            and audit_result.passes()
         )
         typer.echo(
             f"PROCESSED {item.source}: engine={item.value.decision.engine} "
             f"features={audit_result.feature_count} "
-            f"invalid={audit_result.invalid_feature_count}{report_suffix}"
+            f"invalid={invalid_count}{report_suffix}"
         )
         typer.echo(f"QUALITY {'PASS' if quality_passed else 'FAIL'} {item.source}")
     typer.echo(
@@ -217,10 +216,9 @@ def audit(
         typer.echo(f"Benchmark report: {benchmark_output}")
     quality_failed = any(
         item.value is not None
-        and item.value.report is not None
         and (
-            item.value.report.status in {CheckStatus.FAILED, CheckStatus.ERROR}
-            or not item.value.report.passes()
+            item.value.result.status in {CheckStatus.FAILED, CheckStatus.ERROR}
+            or not item.value.result.passes()
         )
         for item in result.items
     )
