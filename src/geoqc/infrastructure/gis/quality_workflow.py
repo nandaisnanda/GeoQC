@@ -107,7 +107,7 @@ def assess_crs(crs: str | None, geometries: Sequence[BaseGeometry] = ()) -> CrsG
     )
 
 
-def audit_dataset(
+def audit_geometries(
     geometries: Sequence[BaseGeometry],
     *,
     dataset_name: str = "dataset",
@@ -213,6 +213,7 @@ def issues_to_geodataframe(
     records = [
         {
             "fingerprint": item.fingerprint,
+            "check_name": item.check_name or item.category,
             "code": item.code,
             "issue_type": item.issue_type,
             "title": item.title,
@@ -220,8 +221,10 @@ def issues_to_geodataframe(
             "severity": item.severity.value,
             "category": item.category,
             "suggested_fix": item.recommendation,
+            "recommendation": item.recommendation,
             "repair_risk": item.repair_risk.value,
             "source_layer": item.layer,
+            "layer": item.layer,
             "feature_index": item.feature_index,
             "related_feature_index": item.related_feature_index,
             "feature_id": item.feature_id,
@@ -232,6 +235,7 @@ def issues_to_geodataframe(
     ]
     columns = [
         "fingerprint",
+        "check_name",
         "code",
         "issue_type",
         "title",
@@ -239,8 +243,10 @@ def issues_to_geodataframe(
         "severity",
         "category",
         "suggested_fix",
+        "recommendation",
         "repair_risk",
         "source_layer",
+        "layer",
         "feature_index",
         "related_feature_index",
         "feature_id",
@@ -551,14 +557,28 @@ def score_issues(
 ) -> tuple[tuple[CategoryScore, ...], tuple[ScoreDeduction, ...], float]:
     """Score findings with size-normalized penalties and explain every deduction."""
     selected_policy = policy or ScoringPolicy()
+    if feature_count < 0:
+        raise ValueError("feature_count must be non-negative")
     denominator = max(1, feature_count)
     scores: list[CategoryScore] = []
     deductions: list[ScoreDeduction] = []
     for category in selected_policy.category_weights:
         category_issues = [item for item in issues if item.category == category]
         points = 0.0
+        entity_points: dict[tuple[int | None, int | None], float] = {}
         for issue in category_issues:
-            deduction = selected_policy.severity_penalties[issue.severity] / denominator
+            affected = (
+                len(set(issue.feature_indices)) / denominator if issue.feature_indices else 1.0
+            )
+            raw = selected_policy.severity_penalties[issue.severity] * min(1.0, affected)
+            entity = (issue.feature_index, issue.related_feature_index)
+            entity_remaining = max(
+                0.0,
+                selected_policy.repeated_feature_cap - entity_points.get(entity, 0.0),
+            )
+            category_remaining = max(0.0, selected_policy.category_caps[category] - points)
+            deduction = min(raw, entity_remaining, category_remaining)
+            entity_points[entity] = entity_points.get(entity, 0.0) + deduction
             points += deduction
             deductions.append(
                 ScoreDeduction(
@@ -567,9 +587,11 @@ def score_issues(
                     severity=issue.severity,
                     points=round(deduction, 4),
                     explanation=(
-                        f"{issue.title}: {issue.severity.value} penalty "
-                        f"{selected_policy.severity_penalties[issue.severity]:g} "
-                        f"divided by {denominator} feature(s)."
+                        f"{issue.title}: {issue.severity.value} base penalty "
+                        f"{selected_policy.severity_penalties[issue.severity]:g} × "
+                        f"affected proportion {affected:.6f}; bounded by the "
+                        f"{selected_policy.repeated_feature_cap:g}-point repeated-feature "
+                        f"cap and {selected_policy.category_caps[category]:g}-point category cap."
                     ),
                 )
             )

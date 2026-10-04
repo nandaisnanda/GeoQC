@@ -10,7 +10,7 @@ from geoqc.application.benchmarking import (
 )
 from geoqc.application.engine_selection import EngineDecision
 from geoqc.application.streaming.geometry import GeometryAuditResult
-from geoqc.domain.models import DatasetAuditReport
+from geoqc.domain.models import DatasetAuditResult
 from geoqc.infrastructure.benchmarking import ProcessBenchmarkRecorder
 from geoqc.infrastructure.gis.dataset_audit import _audit_dataset_with_geometry
 
@@ -22,7 +22,7 @@ class DatasetAudit:
     result: GeometryAuditResult
     decision: EngineDecision
     benchmark: BenchmarkMetrics | None = None
-    report: DatasetAuditReport | None = None
+    report: DatasetAuditResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,9 +50,13 @@ class DatasetAuditWorker:
         return DatasetAudit(result=result, decision=decision, benchmark=metrics, report=report)
 
 
-def audit_dataset(path: Path) -> DatasetAudit:
+def audit_dataset_worker(path: Path) -> DatasetAudit:
     """Build process-local GIS adapters and audit one dataset read-only."""
     return DatasetAuditWorker()(path)
+
+
+# Internal compatibility name used by P0 batch integrations.
+audit_dataset = audit_dataset_worker
 
 
 def _describe_audit(
@@ -63,7 +67,7 @@ def _describe_audit(
 
 
 def _describe_unified_audit(
-    value: tuple[DatasetAuditReport, GeometryAuditResult, EngineDecision],
+    value: tuple[DatasetAuditResult, GeometryAuditResult, EngineDecision],
 ) -> tuple[int, int, str]:
     report, _, decision = value
     return report.metadata.feature_count, report.metadata.feature_count, decision.engine

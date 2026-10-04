@@ -8,14 +8,13 @@ clickable point, line, and polygon issue layers.
 ## One-call file workflow
 
 `audit_dataset()` is the stable, dataset-level entry point for a read-only
-audit. It uses the existing automatic geometry engine, CRS guard, and attribute
-scanner and returns a deterministic `DatasetAuditReport`:
+audit and returns the canonical `DatasetAuditResult`:
 
 ```python
 import geoqc
 
-report = geoqc.audit_dataset("data.gpkg", layer=None, schema=None, checks="all")
-for check in report.checks:
+result = geoqc.audit_dataset("data.gpkg", profile="road-network")
+for check in result.checks:
     print(check.name, check.status, check.reason, check.issue_count)
 ```
 
@@ -24,18 +23,17 @@ per-check status, issue counts, feature indices, severity, and recommendations.
 Checks that need a schema, topology rules, reference layers, projected units,
 or other missing prerequisites are `skipped`, never silently executed.
 
-`audit_file()` and `audit_geodataframe()` combine geometry, topology, CRS,
-and configured attribute checks into one versioned result.
+`audit_file()` is a deprecated alias. `audit_geodataframe()` remains the
+in-memory adapter for callers that already own a GeoDataFrame.
 
 ```python
-from geoqc import audit_file, load_quality_profile, write_audit_report, write_issue_layers
+from geoqc import audit_dataset
 
-profile = load_quality_profile("parcel-profile.yaml")
-result = audit_file("parcels.gpkg", layer="parcels", profile=profile)
+result = audit_dataset("parcels.gpkg", layer="parcels", profile="parcel-profile.yaml")
 
-write_issue_layers(result, "parcel-issues.gpkg")
-write_audit_report(result, "parcel-report.html")
-raise SystemExit(0 if result.passes(profile.gate) else 1)
+result.write_findings("parcel-issues.gpkg")
+result.to_json("parcel-report.json")
+result.to_html("parcel-report.html")
 ```
 
 Use `run_quality_workflow()` to perform those steps in one call. Outputs never
@@ -92,11 +90,18 @@ JSON reports use exactly this schema.
 
 ## Explainable weighted scoring
 
-Penalties are divided by feature count so a large dataset is not driven to
-zero by a small number of issues. Category scores are combined using profile
-weights. `result.score_deductions` explains the fingerprint, severity, points,
-and formula contribution for every deduction. Mandatory failure thresholds
-remain separate through `QualityGatePolicy`.
+For feature findings, each deduction is the configured severity penalty
+multiplied by `affected feature count / dataset feature count`. Dataset-wide
+findings (for example, a missing CRS) use an affected proportion of `1` so
+they are not diluted in a large file. Repeated findings against the same
+feature and total deductions within a category are capped by
+`repeated_feature_cap` and `category_caps`. Category scores are then combined
+using the optional profile weights and clamped to `0–100`.
+
+`result.score_deductions` exposes every contribution, including deductions
+reduced to zero by a cap. This advisory score is an explainable prioritization
+aid, not an official or regulatory quality standard. Mandatory failure
+thresholds remain separate through `QualityGatePolicy`.
 
 ## Safe repair and preview
 

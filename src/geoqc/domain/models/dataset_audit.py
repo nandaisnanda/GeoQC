@@ -1,10 +1,17 @@
 """Portable result models for public dataset-level audits."""
 
+from __future__ import annotations
+
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
 from geoqc.domain.rules import Severity
+
+if TYPE_CHECKING:
+    from geoqc.domain.models.quality_workflow import DatasetAuditResult
 
 
 class CheckStatus(StrEnum):
@@ -45,7 +52,7 @@ class AuditDatasetMetadata:
 
 @dataclass(frozen=True, slots=True)
 class AuditIssue:
-    """One actionable issue normalized across existing GeoQC services."""
+    """Deprecated input shape accepted by the P0 compatibility adapter."""
 
     code: str
     message: str
@@ -54,6 +61,11 @@ class AuditIssue:
     feature_indices: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
+        warnings.warn(
+            "AuditIssue is deprecated; use DatasetIssue from geoqc instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         for name in ("code", "message", "recommendation"):
             if not str(getattr(self, name)).strip():
                 raise ValueError(f"{name} must not be empty")
@@ -61,7 +73,6 @@ class AuditIssue:
             raise ValueError("feature indices must be non-negative")
 
     def to_dict(self) -> dict[str, object]:
-        """Return a JSON-compatible issue in deterministic field order."""
         return {
             "code": self.code,
             "message": self.message,
@@ -77,7 +88,7 @@ class AuditCheckResult:
 
     name: str
     status: CheckStatus
-    issues: tuple[AuditIssue, ...] = ()
+    issues: tuple[Any, ...] = ()
     reason: str | None = None
     counts: Mapping[str, int] = field(default_factory=dict)
 
@@ -106,7 +117,15 @@ class AuditCheckResult:
 
     @property
     def feature_indices(self) -> tuple[int, ...]:
-        return tuple(sorted({index for issue in self.issues for index in issue.feature_indices}))
+        indices: set[int] = set()
+        for issue in self.issues:
+            legacy = getattr(issue, "feature_indices", ())
+            indices.update(int(index) for index in legacy)
+            for attribute in ("feature_index", "related_feature_index"):
+                index = getattr(issue, attribute, None)
+                if index is not None:
+                    indices.add(int(index))
+        return tuple(sorted(indices))
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-compatible check result in deterministic field order."""
@@ -121,52 +140,39 @@ class AuditCheckResult:
         }
 
 
-@dataclass(frozen=True, slots=True)
-class DatasetAuditReport:
-    """Unified, deterministic report returned by :func:`geoqc.audit_dataset`."""
+def DatasetAuditReport(  # noqa: N802
+    metadata: AuditDatasetMetadata,
+    checks: tuple[AuditCheckResult, ...],
+    schema_version: str = "1.0",
+) -> DatasetAuditResult:
+    """Construct the canonical result from the deprecated P0 report shape."""
+    warnings.warn(
+        "DatasetAuditReport is deprecated; use DatasetAuditResult returned by "
+        "geoqc.audit_dataset().",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    from geoqc.domain.models.quality_workflow import (
+        CrsGuardResult,
+        CrsUnitStatus,
+        DatasetAuditResult,
+    )
 
-    metadata: AuditDatasetMetadata
-    checks: tuple[AuditCheckResult, ...]
-    schema_version: str = "1.0"
-
-    def __post_init__(self) -> None:
-        names = tuple(check.name for check in self.checks)
-        if len(names) != len(set(names)):
-            raise ValueError("check names must be unique")
-
-    @property
-    def status(self) -> CheckStatus:
-        statuses = {check.status for check in self.checks}
-        if CheckStatus.ERROR in statuses:
-            return CheckStatus.ERROR
-        if CheckStatus.FAILED in statuses:
-            return CheckStatus.FAILED
-        if CheckStatus.PASSED in statuses:
-            return CheckStatus.PASSED
-        return CheckStatus.SKIPPED
-
-    @property
-    def issue_count(self) -> int:
-        return sum(check.issue_count for check in self.checks)
-
-    @property
-    def feature_indices(self) -> tuple[int, ...]:
-        return tuple(sorted({index for check in self.checks for index in check.feature_indices}))
-
-    def check(self, name: str) -> AuditCheckResult:
-        """Return a named check or raise ``KeyError`` when it is absent."""
-        selected = next((check for check in self.checks if check.name == name), None)
-        if selected is None:
-            raise KeyError(name)
-        return selected
-
-    def to_dict(self) -> dict[str, object]:
-        """Return a deterministic JSON-compatible representation."""
-        return {
-            "schema_version": self.schema_version,
-            "status": self.status.value,
-            "issue_count": self.issue_count,
-            "feature_indices": list(self.feature_indices),
-            "metadata": self.metadata.to_dict(),
-            "checks": [check.to_dict() for check in self.checks],
-        }
+    return DatasetAuditResult(
+        dataset_name=metadata.layer or metadata.path,
+        preset=None,
+        feature_count=metadata.feature_count,
+        issues=(),
+        crs_guard=CrsGuardResult(
+            metadata.crs,
+            CrsUnitStatus.UNKNOWN if metadata.crs is None else CrsUnitStatus.SAFE,
+            None,
+            False,
+            "Compatibility result constructed from DatasetAuditReport.",
+        ),
+        category_scores=(),
+        quality_score=100.0,
+        schema_version=schema_version,
+        metadata=metadata,
+        checks=checks,
+    )

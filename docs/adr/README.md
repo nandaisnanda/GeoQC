@@ -8,3 +8,4 @@ Accepted, Superseded, or Rejected.
 - [0002: Arrow-based streaming audit pipeline](0002-streaming-engine.md)
 - [0003: Automatic Audit Engine Detection](0003-auto-engine-detection.md)
 - [0004: Dataset-level process parallelism for streaming audits](0004-dataset-level-parallel-streaming.md)
+- [0005: One canonical dataset audit result](0005-canonical-dataset-audit.md)
