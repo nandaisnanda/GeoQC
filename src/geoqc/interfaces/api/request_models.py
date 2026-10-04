@@ -5,8 +5,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from geoqc import DatasetSnapshot, RepairCandidate, RepairConfig, SpatialLayer
-from geoqc.application.streaming.geometry import GeometryAuditResult
 from geoqc.interfaces.api.settings import MAX_ENCODED_UPLOAD_CHARS as _MAX_ENCODED_UPLOAD_CHARS
+from geoqc.interfaces.api.settings import MAX_REPAIR_FEATURES as _MAX_REPAIR_FEATURES
+
 
 class UploadedFile(BaseModel):
     """One browser-selected geospatial dataset component."""
@@ -16,6 +17,7 @@ class UploadedFile(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     content_base64: str = Field(min_length=1, max_length=_MAX_ENCODED_UPLOAD_CHARS)
 
+
 class GeospatialValidationRequest(BaseModel):
     """A bounded geospatial dataset sent by the local web client."""
 
@@ -23,6 +25,7 @@ class GeospatialValidationRequest(BaseModel):
 
     files: list[UploadedFile] = Field(min_length=1, max_length=5)
     layer: str | None = Field(default=None, min_length=1, max_length=255)
+
 
 class TopologyRepairOptions(BaseModel):
     """Conservative, coordinate-unit-aware controls for topology repair."""
@@ -40,11 +43,13 @@ class TopologyRepairOptions(BaseModel):
         """Translate the validated transport model into a domain policy."""
         return RepairConfig(**self.model_dump())
 
+
 class GeospatialRepairRequest(GeospatialValidationRequest):
     """A dataset repair preview with explicit safety thresholds."""
 
     mode: Literal["preview"] = "preview"
     options: TopologyRepairOptions = Field(default_factory=TopologyRepairOptions)
+
 
 class SpatialDuplicateRequest(BaseModel):
     """Bounded WKT payload for exact and near-duplicate detection."""
@@ -55,6 +60,7 @@ class SpatialDuplicateRequest(BaseModel):
     similarity_threshold: float = Field(default=0.85, ge=0, le=1)
     search_tolerance: float = Field(default=0.0, ge=0)
     maximum_pairs: int = Field(default=100_000, ge=1, le=1_000_000)
+
 
 class DatasetSnapshotRequest(BaseModel):
     """Transport representation of one dataset comparison snapshot."""
@@ -76,6 +82,7 @@ class DatasetSnapshotRequest(BaseModel):
             self.name,
         )
 
+
 class DatasetComparisonRequest(BaseModel):
     """Two snapshots and a deterministic geometry matching threshold."""
 
@@ -84,6 +91,7 @@ class DatasetComparisonRequest(BaseModel):
     left: DatasetSnapshotRequest
     right: DatasetSnapshotRequest
     match_threshold: float = Field(default=0.5, ge=0, le=1)
+
 
 class SpatialLayerRequest(BaseModel):
     """One semantic layer used by the conflict analyzer."""
@@ -98,12 +106,14 @@ class SpatialLayerRequest(BaseModel):
     def to_domain(self) -> SpatialLayer:
         return SpatialLayer(self.name, self.role, tuple(self.geometries_wkt), self.agency)
 
+
 class SpatialConflictRequest(BaseModel):
     """Bounded multi-layer conflict analysis payload."""
 
     model_config = ConfigDict(extra="forbid")
 
     layers: list[SpatialLayerRequest] = Field(min_length=2, max_length=25)
+
 
 class RepairCandidateRequest(BaseModel):
     """One explainable input to the deterministic priority rule engine."""
@@ -121,6 +131,7 @@ class RepairCandidateRequest(BaseModel):
     def to_domain(self) -> RepairCandidate:
         return RepairCandidate(**self.model_dump())
 
+
 class RepairPriorityRequest(BaseModel):
     """Candidates accepted by the non-AI repair recommendation engine."""
 
@@ -128,8 +139,6 @@ class RepairPriorityRequest(BaseModel):
 
     candidates: list[RepairCandidateRequest] = Field(min_length=1, max_length=100_000)
 
-
-@dataclass(frozen=True, slots=True)
 
 class GeometryIssueResponse(BaseModel):
     """One normalized geometry issue returned by the API."""
@@ -139,6 +148,7 @@ class GeometryIssueResponse(BaseModel):
     type: str
     message: str
 
+
 class GeometryFindingResponse(BaseModel):
     """Issues associated with one zero-based feature index."""
 
@@ -146,6 +156,7 @@ class GeometryFindingResponse(BaseModel):
 
     feature_index: int = Field(ge=0)
     issues: list[GeometryIssueResponse]
+
 
 class GeospatialValidationResponse(BaseModel):
     """Validated and documented response contract for dataset validation."""
@@ -161,6 +172,7 @@ class GeospatialValidationResponse(BaseModel):
     findings: list[GeometryFindingResponse]
     findings_truncated: bool
 
+
 class RepairActionResponse(BaseModel):
     """One repair step applied to a geometry."""
 
@@ -169,6 +181,7 @@ class RepairActionResponse(BaseModel):
     issue_type: str
     strategy: str
     detail: str
+
 
 class RepairFeatureResponse(BaseModel):
     """A single changed feature with its before/after geometry as WKT."""
@@ -184,6 +197,7 @@ class RepairFeatureResponse(BaseModel):
     shape_shift: float
     before_wkt: str
     after_wkt: str
+
 
 class GeospatialRepairResponse(BaseModel):
     """Aggregate repair report plus a downloadable repaired dataset."""
@@ -204,4 +218,3 @@ class GeospatialRepairResponse(BaseModel):
     findings_truncated: bool
     original_geojson: str
     repaired_geojson: str
-

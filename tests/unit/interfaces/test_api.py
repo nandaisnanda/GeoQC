@@ -8,9 +8,8 @@ import pyogrio  # type: ignore[import-untyped]
 import pytest
 from fastapi.testclient import TestClient
 from shapely.geometry import Polygon
-from starlette.routing import BaseRoute
 
-from geoqc.interfaces.api.main import app
+from geoqc.interfaces.api.app import app
 
 CLIENT = TestClient(app)
 
@@ -36,22 +35,20 @@ def test_api_responses_include_security_headers() -> None:
 
 def test_api_exposes_geometry_validation_route() -> None:
     """The composition root exposes the generic geospatial use case."""
-    documented_paths = {
-        route_path for route in app.routes if (route_path := _route_path(route)) is not None
-    }
-    assert documented_paths == {
+    assert set(CLIENT.get("/openapi.json").json()["paths"]) == {
         "/api/geometry/repair",
         "/api/geometry/validate",
-        "/api/geometry/validate-shapefile",
         "/api/repairs/prioritize",
         "/api/spatial/compare",
         "/api/spatial/conflicts",
         "/api/spatial/duplicates",
-        "/docs",
-        "/docs/oauth2-redirect",
-        "/openapi.json",
-        "/redoc",
     }
+    assert CLIENT.post("/api/geometry/validate-shapefile", json={}).status_code == 422
+    for path in ("/docs", "/redoc", "/docs/oauth2-redirect"):
+        assert CLIENT.get(path).status_code == 200
+    from geoqc.interfaces.api.main import app as legacy_app
+
+    assert legacy_app is app
 
 
 def test_enterprise_spatial_api_contracts() -> None:
@@ -276,8 +273,9 @@ def test_validate_rejects_unknown_request_fields() -> None:
 
 def test_validate_does_not_expose_reader_exception(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """GDAL and filesystem exception details stay in server logs."""
+    """GDAL and filesystem exception details stay out of responses and logs."""
     secret = "sensitive-local-path"
 
     def fail_read_info(*_args: object, **_kwargs: object) -> None:
@@ -291,6 +289,7 @@ def test_validate_does_not_expose_reader_exception(
 
     assert response.status_code == 422
     assert secret not in response.json()["detail"]
+    assert secret not in caplog.text
 
 
 def _encoded_file(path: Path) -> dict[str, str]:
@@ -299,9 +298,3 @@ def _encoded_file(path: Path) -> dict[str, str]:
         "name": path.name,
         "content_base64": base64.b64encode(path.read_bytes()).decode("ascii"),
     }
-
-
-def _route_path(route: BaseRoute) -> str | None:
-    """Read a route path without assuming all Starlette route subtypes expose it."""
-    path = getattr(route, "path", None)
-    return path if isinstance(path, str) else None

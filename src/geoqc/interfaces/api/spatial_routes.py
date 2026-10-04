@@ -5,10 +5,24 @@ from dataclasses import asdict
 import shapely
 from fastapi import APIRouter, HTTPException
 
-from geoqc import ConflictPolicy, PriorityWeights, SpatialDuplicateConfig, analyze_spatial_conflicts, compare_datasets, detect_spatial_duplicates, prioritize_repairs
-from geoqc.interfaces.api.request_models import DatasetComparisonRequest, RepairPriorityRequest, SpatialConflictRequest, SpatialDuplicateRequest
+from geoqc import (
+    ConflictPolicy,
+    PriorityWeights,
+    SpatialDuplicateConfig,
+    analyze_spatial_conflicts,
+    compare_datasets,
+    detect_spatial_duplicates,
+    prioritize_repairs,
+)
+from geoqc.interfaces.api.request_models import (
+    DatasetComparisonRequest,
+    RepairPriorityRequest,
+    SpatialConflictRequest,
+    SpatialDuplicateRequest,
+)
 
 router = APIRouter()
+
 
 @router.post("/api/spatial/duplicates")
 def spatial_duplicates(payload: SpatialDuplicateRequest) -> dict[str, object]:
@@ -29,6 +43,7 @@ def spatial_duplicates(payload: SpatialDuplicateRequest) -> dict[str, object]:
             status_code=422, detail="Invalid duplicate-analysis payload."
         ) from error
 
+
 @router.post("/api/spatial/compare")
 def spatial_compare(payload: DatasetComparisonRequest) -> dict[str, object]:
     """Return geometry, attribute, CRS, schema, and boundary differences."""
@@ -45,6 +60,7 @@ def spatial_compare(payload: DatasetComparisonRequest) -> dict[str, object]:
             status_code=422, detail="Invalid dataset-comparison payload."
         ) from error
 
+
 @router.post("/api/spatial/conflicts")
 def spatial_conflicts(payload: SpatialConflictRequest) -> dict[str, object]:
     """Return semantic cross-layer conflicts and severity scores."""
@@ -55,6 +71,7 @@ def spatial_conflicts(payload: SpatialConflictRequest) -> dict[str, object]:
         return asdict(report)
     except (TypeError, ValueError, shapely.errors.GEOSException) as error:
         raise HTTPException(status_code=422, detail="Invalid conflict-analysis payload.") from error
+
 
 @router.post("/api/repairs/prioritize")
 def repair_priorities(payload: RepairPriorityRequest) -> dict[str, object]:

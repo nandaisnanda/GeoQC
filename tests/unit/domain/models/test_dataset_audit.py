@@ -21,15 +21,17 @@ def _metadata() -> AuditDatasetMetadata:
 
 
 def test_report_serialization_is_deterministic_and_complete() -> None:
-    issue = AuditIssue("GEO-INVALID", "Invalid.", Severity.ERROR, "Repair it.", (2, 0))
-    report = DatasetAuditReport(
-        _metadata(),
-        (
-            AuditCheckResult("geometry", CheckStatus.FAILED, (issue,)),
-            AuditCheckResult("crs", CheckStatus.PASSED),
-            AuditCheckResult("attributes", CheckStatus.SKIPPED, reason="No schema."),
-        ),
-    )
+    with pytest.warns(DeprecationWarning, match="AuditIssue is deprecated"):
+        issue = AuditIssue("GEO-INVALID", "Invalid.", Severity.ERROR, "Repair it.", (2, 0))
+    with pytest.warns(DeprecationWarning, match="DatasetAuditReport is deprecated"):
+        report = DatasetAuditReport(
+            _metadata(),
+            (
+                AuditCheckResult("geometry", CheckStatus.FAILED, (issue,)),
+                AuditCheckResult("crs", CheckStatus.PASSED),
+                AuditCheckResult("attributes", CheckStatus.SKIPPED, reason="No schema."),
+            ),
+        )
 
     first = json.dumps(report.to_dict(), separators=(",", ":"))
     second = json.dumps(report.to_dict(), separators=(",", ":"))
@@ -46,17 +48,26 @@ def test_report_model_enforces_status_invariants() -> None:
         AuditCheckResult("topology", CheckStatus.SKIPPED)
     with pytest.raises(ValueError, match="issue"):
         AuditCheckResult("geometry", CheckStatus.FAILED)
-    with pytest.raises(ValueError, match="passed"):
+    with (
+        pytest.raises(ValueError, match="passed"),
+        pytest.warns(DeprecationWarning, match="AuditIssue is deprecated"),
+    ):
         AuditCheckResult(
             "geometry",
             CheckStatus.PASSED,
             (AuditIssue("GEO-X", "Bad.", Severity.ERROR, "Fix."),),
         )
-    with pytest.raises(ValueError, match="non-negative"):
+    with (
+        pytest.raises(ValueError, match="non-negative"),
+        pytest.warns(DeprecationWarning, match="AuditIssue is deprecated"),
+    ):
         AuditIssue("GEO-X", "Bad.", Severity.ERROR, "Fix.", (-1,))
     with pytest.raises(ValueError, match="counts"):
         AuditCheckResult("geometry", CheckStatus.PASSED, counts={"bad": -1})
-    with pytest.raises(ValueError, match="unique"):
+    with (
+        pytest.raises(ValueError, match="unique"),
+        pytest.warns(DeprecationWarning, match="DatasetAuditReport is deprecated"),
+    ):
         DatasetAuditReport(
             _metadata(),
             (
@@ -68,10 +79,11 @@ def test_report_model_enforces_status_invariants() -> None:
 
 def test_report_status_precedence_and_missing_check() -> None:
     error = AuditCheckResult("attributes", CheckStatus.ERROR, reason="read failed")
-    report = DatasetAuditReport(
-        _metadata(),
-        (AuditCheckResult("geometry", CheckStatus.PASSED), error),
-    )
+    with pytest.warns(DeprecationWarning, match="DatasetAuditReport is deprecated"):
+        report = DatasetAuditReport(
+            _metadata(),
+            (AuditCheckResult("geometry", CheckStatus.PASSED), error),
+        )
 
     assert report.status is CheckStatus.ERROR
     with pytest.raises(KeyError):

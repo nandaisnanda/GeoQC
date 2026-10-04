@@ -35,6 +35,7 @@ from geoqc.infrastructure.gis.parallel_audit import (
 )
 from geoqc.infrastructure.gis.road_dataset_repair import RoadDatasetRepairer
 from geoqc.infrastructure.reporting import BenchmarkFormat, write_benchmark_report
+from geoqc.interfaces.cli.delivery import app as delivery_app
 from geoqc.interfaces.cli.progress import ParallelConsoleProgress
 
 app: typer.Typer = typer.Typer(
@@ -44,6 +45,9 @@ app: typer.Typer = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
+
+
+app.add_typer(delivery_app)
 
 
 @app.callback()

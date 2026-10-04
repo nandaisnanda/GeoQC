@@ -200,3 +200,9 @@ raise SystemExit(0 if result.passes(policy) else 1)
 For baseline/version comparison, use `DatasetSnapshot` and
 `compare_datasets()`. The result records added, removed, modified, and unchanged
 features, attribute and schema changes, CRS equality, and boundary differences.
+
+Disabled checks use the stable reason `Check not selected by quality profile.`
+This applies to both profile selection and deprecated `checks` arguments.
+Implementation responsibilities live in `dataset_audit`, `dataset_checks`,
+`dataset_scoring`, `profile_loading`, `profile_schema`, and `dataset_export`;
+`dataset_workflow` preserves historical imports through re-exports.

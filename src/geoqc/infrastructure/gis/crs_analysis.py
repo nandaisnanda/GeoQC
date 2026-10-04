@@ -4,6 +4,7 @@ from collections.abc import Sequence
 
 import shapely
 from pyproj import CRS
+from pyproj.exceptions import CRSError
 from shapely.geometry.base import BaseGeometry
 
 from geoqc.domain.models import CrsGuardResult, CrsUnitStatus
@@ -21,7 +22,7 @@ def assess_crs(crs: str | None, geometries: Sequence[BaseGeometry] = ()) -> CrsG
         )
     try:
         parsed = CRS.from_user_input(crs)
-    except Exception:
+    except CRSError:
         return CrsGuardResult(
             str(crs),
             CrsUnitStatus.UNKNOWN,
