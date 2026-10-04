@@ -70,8 +70,8 @@ from geoqc.domain.models.spatial_intelligence import (
     SmallPolygonConfig,
     SmallPolygonReport,
 )
-from geoqc.infrastructure.gis.dataset_audit import audit_dataset
 from geoqc.infrastructure.gis.dataset_workflow import (
+    audit_dataset,
     audit_file,
     audit_geodataframe,
     audit_layers,
@@ -85,11 +85,9 @@ from geoqc.infrastructure.gis.dataset_workflow import (
 )
 from geoqc.infrastructure.gis.quality_workflow import (
     assess_crs,
+    audit_geometries,
     evaluate_topology_rules,
     issues_to_geodataframe,
-)
-from geoqc.infrastructure.gis.quality_workflow import (
-    audit_dataset as audit_geometries,
 )
 from geoqc.infrastructure.gis.shapely_enterprise_spatial import (
     ShapelyDatasetComparator,

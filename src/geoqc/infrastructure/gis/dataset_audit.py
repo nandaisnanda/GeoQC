@@ -18,6 +18,7 @@ from geoqc.domain.models import (
     AuditIssue,
     CheckStatus,
     DatasetAuditReport,
+    DatasetAuditResult,
 )
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.automatic_geometry_engine import AutomaticGeometryEngine
@@ -42,25 +43,6 @@ _ATTRIBUTE_RECOMMENDATIONS = {
 }
 
 
-def audit_dataset(
-    source: str | Path,
-    *,
-    layer: str | None = None,
-    schema: AttributeSchema | None = None,
-    checks: str | Iterable[str] = "all",
-    chunk_size: int = 16_384,
-) -> DatasetAuditReport:
-    """Audit one vector dataset by orchestrating existing GeoQC services."""
-    report, _, _ = _audit_dataset_with_geometry(
-        source,
-        layer=layer,
-        schema=schema,
-        checks=checks,
-        chunk_size=chunk_size,
-    )
-    return report
-
-
 def _audit_dataset_with_geometry(
     source: str | Path,
     *,
@@ -68,7 +50,7 @@ def _audit_dataset_with_geometry(
     schema: AttributeSchema | None = None,
     checks: str | Iterable[str] = "all",
     chunk_size: int = 16_384,
-) -> tuple[DatasetAuditReport, GeometryAuditResult, EngineDecision]:
+) -> tuple[DatasetAuditResult, GeometryAuditResult, EngineDecision]:
     """Return the public report plus legacy execution details for CLI adapters."""
     path = Path(source)
     if not path.exists():
@@ -113,7 +95,10 @@ def _audit_dataset_with_geometry(
             metadata.crs,
         ),
     )
-    return DatasetAuditReport(report_metadata, results), geometry_result, decision
+    report = DatasetAuditReport(report_metadata, results)
+    if not isinstance(report, DatasetAuditResult):
+        raise TypeError("DatasetAuditReport compatibility adapter returned an invalid result")
+    return report, geometry_result, decision
 
 
 def _normalize_checks(checks: str | Iterable[str]) -> frozenset[str]:

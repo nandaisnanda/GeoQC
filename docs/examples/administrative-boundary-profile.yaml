@@ -1,0 +1,21 @@
+name: administrative-boundary
+version: 1
+preset: admin_boundary
+enabled_checks: [geometry, crs, attributes, topology]
+expected_geometry_types: [Polygon, MultiPolygon]
+crs:
+  required: true
+  require_projected: true
+  allowed: []
+attribute_schema: []
+topology_rules: []
+severity_overrides: {}
+scoring:
+  category_weights: {geometry: 0.35, topology: 0.35, network: 0.2, attribute: 0.05, metadata: 0.05}
+  severity_penalties: {info: 1, warning: 5, error: 10, critical: 25}
+  category_caps: {geometry: 80, topology: 80, network: 80, attribute: 80, metadata: 80}
+  repeated_feature_cap: 30
+quality_gate:
+  minimum_score: 75
+  fail_on: error
+  allow_unknown_crs: false

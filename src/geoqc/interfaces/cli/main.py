@@ -1,21 +1,26 @@
 """Typer composition root for the GeoQC command-line interface."""
 
 import json
+import warnings
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
 import typer
+from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
 
 from geoqc import (
+    CheckStatus,
     QualityGatePolicy,
     QualityPreset,
     QualityProfile,
     __version__,
-    audit_file,
     load_quality_profile,
     write_audit_report,
     write_issue_layers,
+)
+from geoqc import (
+    audit_dataset as run_dataset_audit,
 )
 from geoqc.application.benchmarking import BenchmarkReport
 from geoqc.application.parallel import ParallelBatchExecutor
@@ -26,7 +31,7 @@ from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.parallel_audit import (
     DatasetAudit,
     DatasetAuditWorker,
-    audit_dataset,
+    audit_dataset_worker,
 )
 from geoqc.infrastructure.gis.road_dataset_repair import RoadDatasetRepairer
 from geoqc.infrastructure.reporting import BenchmarkFormat, write_benchmark_report
@@ -86,14 +91,79 @@ def audit(
         int,
         typer.Option(min=1, help="Maximum features per streaming chunk."),
     ] = 16_384,
+    profile_path: Annotated[
+        Path | None,
+        typer.Option("--profile", help="JSON/YAML profile or a built-in profile name."),
+    ] = None,
+    layer: Annotated[
+        str | None,
+        typer.Option(help="Layer name for a single multi-layer dataset."),
+    ] = None,
+    report: Annotated[
+        Path | None,
+        typer.Option("--report", help="Write the audit result as HTML."),
+    ] = None,
+    json_output: Annotated[
+        Path | None,
+        typer.Option("--json", help="Write the audit result as deterministic JSON."),
+    ] = None,
+    findings: Annotated[
+        Path | None,
+        typer.Option("--findings", help="Write findings as a GeoPackage."),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace requested output files."),
+    ] = False,
 ) -> None:
     """Audit independent datasets with automatic safe multiprocessing."""
-    discovery = BatchProcessor[DatasetAudit](audit_dataset)
+    discovery = BatchProcessor[DatasetAudit](audit_dataset_worker)
     try:
         sources = discovery.discover(inputs, recursive=recursive)
     except (FileNotFoundError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
+
+    outputs_requested = any(item is not None for item in (report, json_output, findings))
+    if (outputs_requested or layer is not None) and len(sources) != 1:
+        typer.echo(
+            "Error: report, json, findings, and layer options require one dataset.", err=True
+        )
+        raise typer.Exit(code=2)
+    try:
+        profile = load_quality_profile(profile_path) if profile_path is not None else None
+    except (FileNotFoundError, OSError, TypeError, ValueError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    if len(sources) == 1 and (outputs_requested or profile is not None or layer is not None):
+        try:
+            quality_result = run_dataset_audit(sources[0], layer=layer, profile=profile)
+            if report is not None:
+                quality_result.to_html(report, overwrite=overwrite)
+            if json_output is not None:
+                quality_result.to_json(json_output, overwrite=overwrite)
+            if findings is not None:
+                quality_result.write_findings(findings, overwrite=overwrite)
+        except (
+            DataSourceError,
+            FileExistsError,
+            FileNotFoundError,
+            OSError,
+            TypeError,
+            ValueError,
+        ) as error:
+            typer.echo(f"Error: {error}", err=True)
+            raise typer.Exit(code=2) from error
+        passed = quality_result.passes(profile.gate if profile is not None else None)
+        typer.echo(
+            f"PROCESSED {sources[0]}: features={quality_result.feature_count} "
+            f"issues={len(quality_result.issues)} score={quality_result.quality_score:.2f}"
+        )
+        typer.echo(f"QUALITY {'PASS' if passed else 'FAIL'}")
+        if not passed:
+            raise typer.Exit(code=1)
+        return
 
     scheduler = TaskScheduler()
     worker_count = scheduler.worker_count(len(sources), requested_workers=workers)
@@ -118,16 +188,21 @@ def audit(
             if item.value.report is not None
             else ""
         )
+        quality_passed = item.value.report is None or (
+            item.value.report.status not in {CheckStatus.FAILED, CheckStatus.ERROR}
+            and item.value.report.passes()
+        )
         typer.echo(
-            f"OK {item.source}: engine={item.value.decision.engine} "
+            f"PROCESSED {item.source}: engine={item.value.decision.engine} "
             f"features={audit_result.feature_count} "
             f"invalid={audit_result.invalid_feature_count}{report_suffix}"
         )
+        typer.echo(f"QUALITY {'PASS' if quality_passed else 'FAIL'} {item.source}")
     typer.echo(
         f"Audit complete: total={result.total} succeeded={result.succeeded} failed={result.failed}"
     )
     if benchmark:
-        report = BenchmarkReport(
+        benchmark_report = BenchmarkReport(
             tuple(
                 item.value.benchmark
                 for item in result.items
@@ -135,12 +210,21 @@ def audit(
             )
         )
         try:
-            write_benchmark_report(report, benchmark_output, benchmark_format)
+            write_benchmark_report(benchmark_report, benchmark_output, benchmark_format)
         except (OSError, ValueError) as error:
             typer.echo(f"Error writing benchmark report: {error}", err=True)
             raise typer.Exit(code=2) from error
         typer.echo(f"Benchmark report: {benchmark_output}")
-    if not result.is_successful:
+    quality_failed = any(
+        item.value is not None
+        and item.value.report is not None
+        and (
+            item.value.report.status in {CheckStatus.FAILED, CheckStatus.ERROR}
+            or not item.value.report.passes()
+        )
+        for item in result.items
+    )
+    if not result.is_successful or quality_failed:
         raise typer.Exit(code=1)
 
 
@@ -181,6 +265,11 @@ def check_dataset(
     ] = False,
 ) -> None:
     """Run the unified, profile-driven dataset quality workflow."""
+    warnings.warn(
+        "geoqc check is deprecated; use geoqc audit DATASET --profile PROFILE.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     try:
         profile = (
             load_quality_profile(profile_path)
@@ -191,7 +280,7 @@ def check_dataset(
                 require_crs=False,
             )
         )
-        result = audit_file(source, layer=layer, profile=profile)
+        result = run_dataset_audit(source, layer=layer, profile=profile)
         if issues is not None:
             write_issue_layers(result, issues, overwrite=overwrite)
         if report is not None:
