@@ -228,7 +228,8 @@ def test_audit_file_writes_issue_layers_and_json_html_reports(tmp_path: Path) ->
     )
     frame.to_file(source, driver="GeoJSON")
 
-    result = geoqc.audit_file(source, profile=_profile())
+    with pytest.warns(DeprecationWarning, match="audit_file\\(\\) is deprecated"):
+        result = geoqc.audit_file(source, profile=_profile())
     issue_path = geoqc.write_issue_layers(result, tmp_path / "issues.gpkg")
     json_path = geoqc.write_audit_report(result, tmp_path / "report.json")
     html_path = geoqc.write_audit_report(result, tmp_path / "report.html")
@@ -279,26 +280,40 @@ def test_missing_crs_and_missing_configured_id_are_rejected() -> None:
 
 
 def test_audit_file_validates_formats_layers_and_reads_parquet(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
+    with (
+        pytest.raises(FileNotFoundError),
+        pytest.warns(DeprecationWarning, match="audit_file\\(\\) is deprecated"),
+    ):
         geoqc.audit_file(tmp_path / "missing.geojson")
     unsupported = tmp_path / "data.txt"
     unsupported.write_text("data", encoding="utf-8")
-    with pytest.raises(ValueError, match="unsupported"):
+    with (
+        pytest.raises(ValueError, match="unsupported"),
+        pytest.warns(DeprecationWarning, match="audit_file\\(\\) is deprecated"),
+    ):
         geoqc.audit_file(unsupported)
 
     parquet = tmp_path / "points.parquet"
     frame = gpd.GeoDataFrame(geometry=[Point(1, 2)], crs="EPSG:4326")
     frame.to_parquet(parquet)
-    assert geoqc.audit_file(parquet).feature_count == 1
+    with pytest.warns(DeprecationWarning, match="audit_file\\(\\) is deprecated"):
+        assert geoqc.audit_file(parquet).feature_count == 1
 
     package = tmp_path / "layers.gpkg"
     frame.to_file(package, layer="first", driver="GPKG")
     frame.to_file(package, layer="second", driver="GPKG")
-    with pytest.raises(ValueError, match="multiple layers"):
+    with (
+        pytest.raises(ValueError, match="multiple layers"),
+        pytest.warns(DeprecationWarning, match="audit_file\\(\\) is deprecated"),
+    ):
         geoqc.audit_file(package)
-    with pytest.raises(ValueError, match="unknown layer"):
+    with (
+        pytest.raises(ValueError, match="unknown layer"),
+        pytest.warns(DeprecationWarning, match="audit_file\\(\\) is deprecated"),
+    ):
         geoqc.audit_file(package, layer="missing")
-    assert geoqc.audit_file(package, layer="second").feature_count == 1
+    with pytest.warns(DeprecationWarning, match="audit_file\\(\\) is deprecated"):
+        assert geoqc.audit_file(package, layer="second").feature_count == 1
 
 
 def test_outputs_protect_existing_files_and_validate_suffixes(tmp_path: Path) -> None:
@@ -319,12 +334,13 @@ def test_run_quality_workflow_returns_every_artifact(tmp_path: Path) -> None:
         source, driver="GeoJSON"
     )
 
-    artifacts = geoqc.run_quality_workflow(
-        source,
-        profile=geoqc.QualityProfile(name="survey", preset=geoqc.QualityPreset.POINT_SURVEY),
-        issue_output=tmp_path / "issues.gpkg",
-        report_output=tmp_path / "report.json",
-    )
+    with pytest.warns(DeprecationWarning, match="run_quality_workflow\\(\\) is deprecated"):
+        artifacts = geoqc.run_quality_workflow(
+            source,
+            profile=geoqc.QualityProfile(name="survey", preset=geoqc.QualityPreset.POINT_SURVEY),
+            issue_output=tmp_path / "issues.gpkg",
+            report_output=tmp_path / "report.json",
+        )
 
     assert artifacts.result.issues
     assert artifacts.issue_dataset is not None

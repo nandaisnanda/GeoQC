@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import geopandas as gpd  # type: ignore[import-untyped]
+import pytest
 from shapely.geometry import Point
 from typer.testing import CliRunner
 
@@ -18,21 +19,22 @@ def test_check_command_writes_outputs_and_returns_gate_failure(tmp_path: Path) -
         source, driver="GeoJSON"
     )
 
-    result = CliRunner().invoke(
-        app,
-        [
-            "check",
-            str(source),
-            "--preset",
-            "point_survey",
-            "--issues",
-            str(issues),
-            "--report",
-            str(report),
-            "--fail-on",
-            "warning",
-        ],
-    )
+    with pytest.warns(DeprecationWarning, match="geoqc check is deprecated"):
+        result = CliRunner().invoke(
+            app,
+            [
+                "check",
+                str(source),
+                "--preset",
+                "point_survey",
+                "--issues",
+                str(issues),
+                "--report",
+                str(report),
+                "--fail-on",
+                "warning",
+            ],
+        )
 
     assert result.exit_code == 1
     assert "status=FAIL" in result.stdout
@@ -57,7 +59,8 @@ quality_gate:
         encoding="utf-8",
     )
 
-    result = CliRunner().invoke(app, ["check", str(source), "--profile", str(profile)])
+    with pytest.warns(DeprecationWarning, match="geoqc check is deprecated"):
+        result = CliRunner().invoke(app, ["check", str(source), "--profile", str(profile)])
 
     assert result.exit_code == 0
     assert "status=PASS" in result.stdout
