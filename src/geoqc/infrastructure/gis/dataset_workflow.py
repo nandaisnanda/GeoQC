@@ -43,6 +43,7 @@ from geoqc.domain.models import (
 )
 from geoqc.domain.models.quality_workflow import AuditResultExporter
 from geoqc.domain.rules import Severity
+from geoqc.infrastructure.gis.legacy import profile_from_legacy_arguments
 from geoqc.infrastructure.gis.quality_workflow import (
     audit_geometries,
     evaluate_topology_rules,
@@ -324,6 +325,7 @@ def audit_dataset(
     chunk_size: int = 16_384,
 ) -> DatasetAuditResult:
     """Canonical file-based dataset QC entry point used by Python and CLI."""
+    selected_profile = _resolve_profile(profile)
     if schema is not None or checks != "all" or chunk_size != 16_384:
         warnings.warn(
             "schema/checks/chunk_size are deprecated audit_dataset arguments; migrate "
@@ -331,17 +333,15 @@ def audit_dataset(
             DeprecationWarning,
             stacklevel=2,
         )
-        from geoqc.infrastructure.gis.dataset_audit import _audit_dataset_with_geometry
+        from geoqc.domain.models import AttributeSchema
 
-        legacy, _, _ = _audit_dataset_with_geometry(
-            source,
-            layer=layer,
-            schema=schema,  # type: ignore[arg-type]
+        if schema is not None and not isinstance(schema, AttributeSchema):
+            raise TypeError("schema must be an AttributeSchema")
+        selected_profile = profile_from_legacy_arguments(
+            selected_profile or _DEFAULT_PROFILE,
+            schema=schema,
             checks=checks,
-            chunk_size=chunk_size,
         )
-        return legacy
-    selected_profile = _resolve_profile(profile)
     return _audit_file_impl(source, layer=layer, profile=selected_profile, preset=preset)
 
 
@@ -358,7 +358,7 @@ def audit_file(
         DeprecationWarning,
         stacklevel=2,
     )
-    return _audit_file_impl(source, layer=layer, profile=profile, preset=preset)
+    return audit_dataset(source, layer=layer, profile=profile, preset=preset)
 
 
 def _audit_file_impl(
@@ -696,14 +696,18 @@ def run_quality_workflow(
         stacklevel=2,
     )
     result = audit_dataset(source, layer=layer, profile=profile)
-    issues = write_issue_layers(result, issue_output, overwrite=overwrite) if issue_output else None
-    report = (
-        write_audit_report(result, report_output, overwrite=overwrite) if report_output else None
-    )
+    if issue_output:
+        result.write_findings(issue_output, overwrite=overwrite)
+    if report_output:
+        suffix = Path(report_output).suffix.casefold()
+        if suffix == ".json":
+            result.to_json(report_output, overwrite=overwrite)
+        else:
+            result.to_html(report_output, overwrite=overwrite)
     return WorkflowArtifacts(
         result=result,
-        issue_dataset=str(issues.resolve()) if issues else None,
-        report=str(report.resolve()) if report else None,
+        issue_dataset=str(Path(issue_output).resolve()) if issue_output else None,
+        report=str(Path(report_output).resolve()) if report_output else None,
     )
 
 

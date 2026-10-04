@@ -4,21 +4,18 @@ import json
 from pathlib import Path
 
 from pytest import MonkeyPatch
+from shapely.geometry import Point
 from typer.testing import CliRunner
 
 from geoqc.application.engine_selection import DatasetProfile, EngineDecision
 from geoqc.application.parallel import ParallelBatchExecutor
-from geoqc.application.streaming.geometry import GeometryAuditResult
 from geoqc.domain.models import (
-    AuditCheckResult,
-    AuditDatasetMetadata,
     BatchItemResult,
     BatchItemStatus,
     BatchResult,
-    CheckStatus,
-    DatasetAuditReport,
 )
 from geoqc.infrastructure.gis.parallel_audit import DatasetAudit
+from geoqc.infrastructure.gis.quality_workflow import audit_geometries
 from geoqc.infrastructure.gis.road_dataset_repair import (
     RoadDatasetRepairer,
     RoadDatasetRepairResult,
@@ -31,11 +28,8 @@ runner = CliRunner()
 def test_audit_folder_reports_dataset_results(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     source = tmp_path / "roads.gpkg"
     source.touch()
-    audit_result = GeometryAuditResult(
-        feature_count=2,
-        invalid_feature_count=0,
-        issue_counts={},
-        findings=(),
+    audit_result = audit_geometries(
+        (Point(0, 0), Point(1, 1)), dataset_name="roads", crs="EPSG:3857"
     )
     decision = EngineDecision(
         engine="streaming",
@@ -53,16 +47,7 @@ def test_audit_folder_reports_dataset_results(monkeypatch: MonkeyPatch, tmp_path
             BatchItemResult(
                 source=str(source),
                 status=BatchItemStatus.SUCCEEDED,
-                value=DatasetAudit(
-                    audit_result,
-                    decision,
-                    report=DatasetAuditReport(
-                        AuditDatasetMetadata(
-                            str(source), None, "GPKG", "EPSG:3857", 2, "geometry", 0, "streaming"
-                        ),
-                        (AuditCheckResult("geometry", CheckStatus.PASSED),),
-                    ),
-                ),
+                value=DatasetAudit(audit_result, decision),
             ),
         )
     )
