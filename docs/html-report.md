@@ -5,6 +5,14 @@
 score, check/severity statistics, the list of errors, and unique
 recommendations.
 
+For a dataset audit, use the delivery command. It creates parent directories,
+rejects non-`.html` destinations, refuses replacement without `--overwrite`,
+and uses an atomic write:
+
+```bash
+geoqc html-report parcels.gpkg reports/parcels.html --overwrite --json
+```
+
 Install the reporting extra first:
 
 ```bash

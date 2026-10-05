@@ -2,6 +2,7 @@
 
 from geoqc.interfaces.api.app import add_security_headers as add_security_headers
 from geoqc.interfaces.api.app import app as app
+from geoqc.interfaces.api.app import create_app as create_app
 from geoqc.interfaces.api.geometry_routes import repair_geospatial as repair_geospatial
 from geoqc.interfaces.api.geometry_routes import validate_geospatial as validate_geospatial
 from geoqc.interfaces.api.request_models import DatasetComparisonRequest as DatasetComparisonRequest

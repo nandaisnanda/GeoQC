@@ -16,6 +16,14 @@ All notable changes to GeoQC are documented here. This project follows
 
 ### Added
 
+- Typed API configuration; API-key/Bearer authentication; process-local rate
+  limiting; request correlation; structured, redacted logs; bounded metrics;
+  and asynchronous validation jobs with retention and cleanup.
+- Delivery CLI commands for CRS consistency scanning, datum-shift detection,
+  axis-order detection, deterministic recursive batch auditing, and atomic
+  self-contained HTML reports, with JSON output and stable `0`/`1`/`2`/`3`
+  exit codes.
+
 - Public `geoqc.audit_dataset()` workflow with deterministic dataset metadata,
   geometry/CRS/schema/topology/spatial check results, actionable skipped-check
   reasons, normalized issue details, and automatic streaming engine selection.
@@ -44,6 +52,9 @@ All notable changes to GeoQC are documented here. This project follows
   optional JSON report.
 
 ### Fixed
+
+- Default audits now report exact duplicate feature geometry as
+  `TOP-NO-DUPLICATE` and all audit CLI paths use the canonical quality gate.
 
 - Road analysis now inspects every `MultiLineString` part instead of only the
   longest part and reports unnoded crossings and T-junctions.

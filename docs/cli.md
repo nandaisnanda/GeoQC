@@ -15,6 +15,11 @@ geoqc --help
 | `geoqc --version`             | Print the installed GeoQC version and exit.      | `0`       |
 | `geoqc audit PATH`            | Audit supported datasets under a file or folder. | `0`/`1`   |
 | `geoqc audit PATH --workers N`| Set a safe requested worker upper bound.          | `0`/`1`   |
+| `geoqc crs-scan PATH...`      | Compare declared CRS metadata.                    | `0`/`1`/`2`/`3` |
+| `geoqc datum-shift SRC DST`   | Audit a datum transformation over bounds.         | `0`/`1`/`2`/`3` |
+| `geoqc axis-order --bounds …` | Classify geographic axis order.                    | `0`/`1`/`2`/`3` |
+| `geoqc batch PATH...`         | Audit datasets with isolated per-item outcomes.   | `0`/`1`/`2`/`3` |
+| `geoqc html-report IN OUT`    | Write an atomic, self-contained HTML audit.        | `0`/`1`/`2`/`3` |
 | `geoqc check DATASET`         | Run unified profile-driven dataset QC.            | `0`/`1`/`2` |
 | `geoqc repair-roads IN OUT`   | Snap and fully node a road layer into a new GPKG. | `0`/`2`   |
 | `geoqc` (no args)             | Equivalent to `--help`.                          | `0`       |
@@ -27,12 +32,29 @@ $ geoqc --version
 GeoQC 0.1.0
 ```
 
-Exit codes follow the conventional Unix/Click meaning: `0` for success and
-`2` for a command-line usage error (unknown option, missing argument, or an
-input path that does not exist). Audit commands return `1` when any discovered
-dataset fails; failures are isolated and remaining datasets continue. The
-CLI disables pretty tracebacks (`pretty_exceptions_enable=False`) so
-unexpected errors print a plain message instead of an internal stack trace.
+Delivery commands use one stable contract: `0` means the operation completed
+and its quality gate passed, `1` means it completed but quality failed, `2`
+means invalid input, and `3` means an unexpected internal failure. Batch uses
+the highest per-item code and continues after invalid or failed files. The CLI
+disables pretty tracebacks and sanitizes unexpected failures.
+
+All five delivery commands support concise human output and deterministic JSON
+with `--json`:
+
+```bash
+geoqc crs-scan parcels.gpkg roads.geojson --json
+geoqc datum-shift EPSG:4267 EPSG:4326 --bounds -125 25 -66 49 --grid-size 5
+geoqc axis-order --bounds 106.7 -6.3 106.9 -6.1 --json
+geoqc batch data/ --recursive --json
+geoqc html-report parcels.gpkg reports/parcels.html --overwrite
+```
+
+The default dataset policy validates geometry structure, requires CRS metadata,
+and rejects exact duplicate feature geometry. `audit`, `batch`, and
+`html-report` all decide quality with the canonical
+`DatasetAuditResult.passes()` API. HTML destinations must end in `.html`;
+parents are created, existing files require `--overwrite`, and replacement is
+atomic.
 
 `geoqc audit` prints the unified dataset report status and issue count while
 retaining deterministic file/folder discovery, `--recursive`, multiprocessing,
@@ -108,12 +130,3 @@ GeoPackage write. Use `--layer NAME` for a multi-layer input GeoPackage and
 rejects null/empty/non-line geometries, unknown CRS, accidental source overwrite,
 and nonzero snapping in geographic coordinates unless `--allow-geographic` is
 explicitly requested. Use `--max-features` to control the in-memory safety cap.
-
-## Planned commands
-
-Subcommands that drive the CRS scanner, datum-shift detector, axis-order
-detector, and HTML report renderer directly from the terminal are tracked in
-[the roadmap](roadmap.md) and are not yet available.
-Until then, use those building blocks as a library (see
-[docs/index.md](index.md) for the full list of modules) or through the
-optional [FastAPI service](api.md).

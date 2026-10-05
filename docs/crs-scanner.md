@@ -44,9 +44,14 @@ for dataset in result.mismatched_datasets:
     print(dataset.source.identifier, dataset.crs.display_name if dataset.crs else None)
 ```
 
-The current vertical slice exposes the Python API only. CLI, FastAPI, and HTML
-serialization adapters should consume `CrsAuditResult` in later iterations;
-they must not duplicate scanner logic.
+The CLI adapter consumes this service directly:
+
+```bash
+geoqc crs-scan survey.gpkg roads.geojson --json
+```
+
+It returns `0` when all declarations match, `1` for missing or mismatched CRS,
+`2` when any dataset is unreadable, and `3` for an unexpected internal failure.
 
 ## Architecture
 

@@ -16,9 +16,6 @@ from geoqc.interfaces.api.settings import (
     MAX_DECODED_UPLOAD_BYTES as _MAX_DECODED_UPLOAD_BYTES,
 )
 from geoqc.interfaces.api.settings import (
-    MAX_ENCODED_UPLOAD_CHARS as _MAX_ENCODED_UPLOAD_CHARS,
-)
-from geoqc.interfaces.api.settings import (
     MAX_FEATURES as _MAX_FEATURES,
 )
 from geoqc.interfaces.api.settings import (
@@ -40,11 +37,18 @@ class _DatasetSelection:
     layer: str | None = None
 
 
-def _decode_components(files: list[UploadedFile]) -> dict[str, bytes]:
+def _decode_components(
+    files: list[UploadedFile],
+    *,
+    max_upload_bytes: int = _MAX_DECODED_UPLOAD_BYTES,
+) -> dict[str, bytes]:
     """Decode a bounded set of safe, uniquely named upload components."""
     components: dict[str, bytes] = {}
-    if sum(len(upload.content_base64) for upload in files) > _MAX_ENCODED_UPLOAD_CHARS:
-        raise HTTPException(status_code=413, detail="The total upload exceeds 100 MiB.")
+    max_encoded_chars = ((max_upload_bytes + 2) // 3) * 4
+    if sum(len(upload.content_base64) for upload in files) > max_encoded_chars:
+        raise HTTPException(
+            status_code=413, detail="The total upload exceeds the configured limit."
+        )
 
     total_size = 0
     for uploaded_file in files:
@@ -61,8 +65,10 @@ def _decode_components(files: list[UploadedFile]) -> dict[str, bytes]:
                 detail=f"Invalid base64 content: {name}",
             ) from error
         total_size += len(content)
-        if total_size > _MAX_DECODED_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail="The total upload exceeds 100 MiB.")
+        if total_size > max_upload_bytes:
+            raise HTTPException(
+                status_code=413, detail="The total upload exceeds the configured limit."
+            )
         components[normalized_name] = content
     return components
 
@@ -141,7 +147,9 @@ def _resolve_layer(dataset_path: Path, requested_layer: str | None) -> str | Non
     return available_layers[0]
 
 
-def _verify_dataset(dataset_path: Path, layer: str | None) -> None:
+def _verify_dataset(
+    dataset_path: Path, layer: str | None, *, max_features: int = _MAX_FEATURES
+) -> None:
     """Verify the detected GDAL driver and reject oversized datasets before loading."""
     info = pyogrio.read_info(dataset_path, layer=layer)
     detected_driver = str(info.get("driver", ""))
@@ -153,10 +161,10 @@ def _verify_dataset(dataset_path: Path, layer: str | None) -> None:
             detail="The file content does not match the dataset extension.",
         )
     feature_count = info.get("features")
-    if isinstance(feature_count, int) and feature_count > _MAX_FEATURES:
+    if isinstance(feature_count, int) and feature_count > max_features:
         raise HTTPException(
             status_code=413,
-            detail=f"The dataset exceeds the {_MAX_FEATURES:,}-feature limit.",
+            detail=f"The dataset exceeds the {max_features:,}-feature limit.",
         )
     geometry_type = info.get("geometry_type")
     if geometry_type is None or str(geometry_type).casefold() == "none":

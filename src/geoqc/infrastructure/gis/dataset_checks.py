@@ -65,10 +65,14 @@ def _checks_for_result(
                     ),
                 )
             )
-        elif name in {"topology", "spatial"} and (
-            profile is None
-            or (name == "topology" and not profile.topology_rules and profile.preset is None)
-            or name == "spatial"
+        elif (
+            not issues
+            and name in {"topology", "spatial"}
+            and (
+                profile is None
+                or (name == "topology" and not profile.topology_rules and profile.preset is None)
+                or name == "spatial"
+            )
         ):
             reason = (
                 "Dataset CRS is missing. Define a projected CRS and configure the required "
