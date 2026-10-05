@@ -22,6 +22,17 @@ audits instead.
 
 ## Example
 
+CLI:
+
+```bash
+geoqc datum-shift EPSG:4267 EPSG:4326 --bounds -125 25 -66 49 --grid-size 5 --json
+```
+
+The command returns `1` for abnormal, indeterminate, or unreliable results;
+invalid CRS/bounds/options return `2` and unexpected failures return `3`.
+
+Python:
+
 ```python
 from geoqc.application.services import DatumShiftDetector
 from geoqc.domain.models import GeographicBounds

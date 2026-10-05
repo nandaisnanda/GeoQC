@@ -6,6 +6,7 @@ from shapely.geometry.base import BaseGeometry
 
 from geoqc.application.scoring_service import score_issues
 from geoqc.domain.models import DatasetAuditResult, QualityPreset, ScoringPolicy
+from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.crs_analysis import assess_crs
 from geoqc.infrastructure.gis.finding_builders import (
     _duplicate_issues,
@@ -38,6 +39,10 @@ def audit_geometries(
     items = tuple(_require_geometry(item) for item in geometries)
     selected = QualityPreset(preset) if preset is not None else None
     issues = list(_geometry_issues(items, dataset_name))
+    # Exact duplicate features are a baseline dataset-integrity failure. This
+    # remains independent of optional dataset-specific presets so every public
+    # audit entry point applies the same default gate.
+    issues.extend(_duplicate_issues(items, dataset_name, severity=Severity.ERROR))
     if selected in {QualityPreset.PARCEL, QualityPreset.ADMIN_BOUNDARY}:
         issues.extend(_overlap_issues(items, dataset_name, tolerance=tolerance))
         issues.extend(_gap_issues(items, dataset_name, tolerance=tolerance))
@@ -45,7 +50,9 @@ def audit_geometries(
             issues.extend(_minimum_area_issues(items, dataset_name, minimum_area))
     elif selected is QualityPreset.ROAD:
         issues.extend(_road_issues(items, dataset_name, tolerance))
-    elif selected is QualityPreset.POINT_SURVEY:
+    elif selected is QualityPreset.POINT_SURVEY and tolerance:
+        # The baseline check catches exact duplicates. Survey profiles may also
+        # treat features within their configured tolerance as duplicates.
         issues.extend(_duplicate_issues(items, dataset_name, tolerance))
     ordered = tuple(sorted(issues, key=_issue_sort_key))
     scores, deductions, overall = score_issues(ordered, len(items), scoring)

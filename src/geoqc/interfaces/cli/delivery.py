@@ -115,7 +115,7 @@ def batch(
             result = audit_dataset(path)
         except INVALID_INPUT as error:
             return {"error": str(error), "status": "invalid_input"}, 2
-        return result.to_dict(), int(result.status.value == "failed")
+        return result.to_dict(), int(not result.passes())
 
     def action() -> tuple[dict[str, object], int]:
         result = BatchProcessor(audit).process(inputs, recursive=recursive)
@@ -151,8 +151,11 @@ def html_report(
             raise ValueError("HTML report destination must use .html")
         result = audit_dataset(source, layer=layer)
         result.to_html(destination, overwrite=overwrite)
-        return {"report": str(destination), "status": result.status.value}, int(
-            result.status.value == "failed"
-        )
+        passed = result.passes()
+        return {
+            "report": str(destination),
+            "status": result.status.value,
+            "quality_gate": "passed" if passed else "failed",
+        }, int(not passed)
 
     execute(action, json_output)

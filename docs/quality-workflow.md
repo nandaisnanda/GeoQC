@@ -185,6 +185,13 @@ feature indices, metrics, and a suggested review action.
 
 ## Reports and CI gates
 
+The default quality policy always validates geometry structure, requires a
+declared CRS, and rejects exact duplicate feature geometries. Duplicate
+features are reported as `TOP-NO-DUPLICATE` errors, so the canonical
+`DatasetAuditResult.passes()` gate fails consistently for Python, `audit`,
+`batch`, and `html-report` callers. Dataset-specific profiles add attribute,
+topology, and spatial rules without replacing those baseline integrity checks.
+
 Use `write_audit_report(result, "report.json")` for the versioned machine
 contract or `write_audit_report(result, "report.html")` for a self-contained
 human report. A quality gate provides deterministic CI behavior without

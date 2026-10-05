@@ -13,13 +13,18 @@ from shapely.geometry.base import BaseGeometry
 from geoqc.interfaces.api.settings import MAX_REPAIR_FEATURES as _MAX_REPAIR_FEATURES
 
 
-def _read_frame(dataset_path: Path, layer: str | None) -> gpd.GeoDataFrame:
+def _read_frame(
+    dataset_path: Path,
+    layer: str | None,
+    *,
+    max_features: int = _MAX_REPAIR_FEATURES,
+) -> gpd.GeoDataFrame:
     """Read a bounded dataset while retaining attributes, index, and CRS."""
     frame = pyogrio.read_dataframe(dataset_path, layer=layer)
-    if len(frame) > _MAX_REPAIR_FEATURES:
+    if len(frame) > max_features:
         raise HTTPException(
             status_code=413,
-            detail=f"Repair is limited to {_MAX_REPAIR_FEATURES:,} features per dataset.",
+            detail=f"Repair is limited to {max_features:,} features per dataset.",
         )
     return frame
 

@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
 from shapely.errors import GEOSException
 
@@ -25,9 +25,7 @@ from geoqc.interfaces.api.request_models import (
     RepairActionResponse,
     RepairFeatureResponse,
 )
-from geoqc.interfaces.api.settings import MAX_FEATURES as _MAX_FEATURES
-from geoqc.interfaces.api.settings import MAX_REPORTED_FEATURES as _MAX_REPORTED_FEATURES
-from geoqc.interfaces.api.settings import STREAMING_CHUNK_SIZE as _STREAMING_CHUNK_SIZE
+from geoqc.interfaces.api.settings import DEFAULT_SETTINGS, ApiSettings
 from geoqc.interfaces.api.upload_security import (
     _decode_components,
     _resolve_layer,
@@ -45,37 +43,54 @@ router = APIRouter()
     response_model=GeospatialValidationResponse,
     include_in_schema=False,
 )
-def validate_geospatial(payload: GeospatialValidationRequest) -> GeospatialValidationResponse:
+def validate_geospatial(
+    payload: GeospatialValidationRequest, request: Request
+) -> GeospatialValidationResponse:
     """Validate every geometry in one bounded, allowlisted geospatial dataset."""
-    components = _decode_components(payload.files)
+    settings: ApiSettings = request.app.state.settings
+    return validate_payload(payload, settings)
+
+
+def validate_payload(
+    payload: GeospatialValidationRequest,
+    settings: ApiSettings = DEFAULT_SETTINGS,
+) -> GeospatialValidationResponse:
+    """Canonical synchronous validation used by HTTP and local job workers."""
+    components = _decode_components(payload.files, max_upload_bytes=settings.max_upload_bytes)
     selection = _validate_component_set(components, payload.layer)
-    with TemporaryDirectory(prefix="geoqc-") as temporary_directory:
+    with TemporaryDirectory(
+        prefix="geoqc-",
+        dir=str(settings.temporary_directory) if settings.temporary_directory else None,
+    ) as temporary_directory:
         directory = Path(temporary_directory)
         for name, content in components.items():
             (directory / name).write_bytes(content)
         dataset_path = directory / selection.filename
         try:
             layer = _resolve_layer(dataset_path, selection.layer)
-            _verify_dataset(dataset_path, layer)
+            _verify_dataset(dataset_path, layer, max_features=settings.max_features)
             source = DatasetSource(dataset_path, layer=layer)
             reader = default_reader_registry().resolve(source)
             metadata = reader.inspect(source)
-            if metadata.feature_count is not None and metadata.feature_count > _MAX_FEATURES:
+            if (
+                metadata.feature_count is not None
+                and metadata.feature_count > settings.max_features
+            ):
                 raise HTTPException(
                     status_code=413,
-                    detail=f"The dataset exceeds the {_MAX_FEATURES:,}-feature limit.",
+                    detail=f"The dataset exceeds the {settings.max_features:,}-feature limit.",
                 )
             audit, _decision = AutomaticGeometryEngine(
                 reader,
-                maximum_findings=_MAX_REPORTED_FEATURES,
-                chunk_size=_STREAMING_CHUNK_SIZE,
+                maximum_findings=settings.max_reported_features,
+                chunk_size=settings.streaming_chunk_size,
             ).run(source)
             if not isinstance(audit, GeometryAuditResult):
                 raise TypeError("Unexpected geometry audit result")
-            if audit.feature_count > _MAX_FEATURES:
+            if audit.feature_count > settings.max_features:
                 raise HTTPException(
                     status_code=413,
-                    detail=f"The dataset exceeds the {_MAX_FEATURES:,}-feature limit.",
+                    detail=f"The dataset exceeds the {settings.max_features:,}-feature limit.",
                 )
         except HTTPException:
             raise
@@ -114,19 +129,25 @@ def validate_geospatial(payload: GeospatialValidationRequest) -> GeospatialValid
 
 
 @router.post("/api/geometry/repair", response_model=GeospatialRepairResponse)
-def repair_geospatial(payload: GeospatialRepairRequest) -> GeospatialRepairResponse:
+def repair_geospatial(
+    payload: GeospatialRepairRequest, request: Request
+) -> GeospatialRepairResponse:
     """Preview a safe repair for every geometry in one bounded coverage."""
-    components = _decode_components(payload.files)
+    settings: ApiSettings = request.app.state.settings
+    components = _decode_components(payload.files, max_upload_bytes=settings.max_upload_bytes)
     selection = _validate_component_set(components, payload.layer)
-    with TemporaryDirectory(prefix="geoqc-") as temporary_directory:
+    with TemporaryDirectory(
+        prefix="geoqc-",
+        dir=str(settings.temporary_directory) if settings.temporary_directory else None,
+    ) as temporary_directory:
         directory = Path(temporary_directory)
         for name, content in components.items():
             (directory / name).write_bytes(content)
         dataset_path = directory / selection.filename
         try:
             layer = _resolve_layer(dataset_path, selection.layer)
-            _verify_dataset(dataset_path, layer)
-            frame = _read_frame(dataset_path, layer)
+            _verify_dataset(dataset_path, layer, max_features=settings.max_features)
+            frame = _read_frame(dataset_path, layer, max_features=settings.max_repair_features)
             geometries = _frame_geometries(frame)
             coverage = repair_geometries(geometries, payload.options.to_domain())
         except HTTPException:
@@ -150,7 +171,7 @@ def repair_geospatial(payload: GeospatialRepairRequest) -> GeospatialRepairRespo
     for item in report.results:
         if not item.result.is_changed:
             continue
-        if len(findings) >= _MAX_REPORTED_FEATURES:
+        if len(findings) >= settings.max_reported_features:
             break
         findings.append(
             RepairFeatureResponse(

@@ -38,6 +38,8 @@ def test_api_exposes_geometry_validation_route() -> None:
     assert set(CLIENT.get("/openapi.json").json()["paths"]) == {
         "/api/geometry/repair",
         "/api/geometry/validate",
+        "/api/jobs/geometry/validate",
+        "/api/jobs/{job_id}",
         "/api/repairs/prioritize",
         "/api/spatial/compare",
         "/api/spatial/conflicts",
