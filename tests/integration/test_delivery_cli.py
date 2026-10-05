@@ -8,6 +8,11 @@ import pytest
 from shapely.geometry import Point
 from typer.testing import CliRunner
 
+from geoqc.application.services import (
+    AxisOrderDetector,
+    CrsConsistencyScanner,
+    DatumShiftDetector,
+)
 from geoqc.interfaces.cli import delivery
 from geoqc.interfaces.cli.main import app
 
@@ -97,6 +102,20 @@ def test_batch_partial_failure_and_empty_folder(dataset: Path, tmp_path: Path) -
     assert RUNNER.invoke(app, ["batch", str(empty)]).exit_code == 2
 
 
+def test_batch_recursive_discovery_and_missing_crs(tmp_path: Path) -> None:
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    source = nested / "unknown.gpkg"
+    gpd.GeoDataFrame(geometry=[Point(1, 2)]).to_file(source, driver="GPKG")
+
+    shallow = RUNNER.invoke(app, ["batch", str(tmp_path), "--json"])
+    assert shallow.exit_code == 2
+    recursive = RUNNER.invoke(app, ["batch", str(tmp_path), "--recursive", "--json"])
+    assert recursive.exit_code == 1
+    item = json.loads(recursive.stdout)["items"][0]
+    assert item["result"]["issues"][0]["code"] == "META-MISSING_CRS"
+
+
 def test_html_creation_overwrite_and_quality_gate(dataset: Path, tmp_path: Path) -> None:
     target = tmp_path / "nested" / "report.html"
     args = ["html-report", str(dataset), str(target), "--json"]
@@ -112,7 +131,18 @@ def test_html_creation_overwrite_and_quality_gate(dataset: Path, tmp_path: Path)
     )
     duplicate = tmp_path / "duplicates.gpkg"
     gpd.GeoDataFrame(geometry=[Point(1, 2), Point(1, 2)], crs="EPSG:4326").to_file(duplicate)
-    assert RUNNER.invoke(app, ["batch", str(duplicate)]).exit_code == 1
+    failed = RUNNER.invoke(app, ["batch", str(duplicate), "--json"])
+    assert failed.exit_code == 1
+    item = json.loads(failed.stdout)["items"][0]
+    assert item["exit_code"] == 1
+    assert item["result"]["issues"][0]["code"] == "TOP-NO-DUPLICATE"
+
+    report = RUNNER.invoke(
+        app,
+        ["html-report", str(duplicate), str(tmp_path / "duplicate.html"), "--json"],
+    )
+    assert report.exit_code == 1
+    assert json.loads(report.stdout)["quality_gate"] == "failed"
 
 
 @pytest.mark.parametrize("command", ["batch", "html-report"])
@@ -130,3 +160,43 @@ def test_internal_failure_is_sanitized(
     assert result.exit_code == 3, result.output
     assert "private implementation" not in result.stdout
     assert "internal_error" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("command", "target"),
+    [
+        (["crs-scan", "dataset.gpkg"], (CrsConsistencyScanner, "scan")),
+        (
+            ["axis-order", "--bounds", "110", "-8", "111", "-7"],
+            (AxisOrderDetector, "detect"),
+        ),
+        (
+            [
+                "datum-shift",
+                "EPSG:4326",
+                "EPSG:4326",
+                "--bounds",
+                "110",
+                "-8",
+                "111",
+                "-7",
+            ],
+            (DatumShiftDetector, "detect"),
+        ),
+    ],
+)
+def test_service_internal_failure_is_exit_three(
+    command: list[str],
+    target: tuple[type[object], str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("sensitive service detail")
+
+    monkeypatch.setattr(target[0], target[1], fail)
+    result = RUNNER.invoke(app, [*command, "--json"])
+    assert result.exit_code == 3
+    assert json.loads(result.stdout) == {
+        "error": "Unexpected internal failure.",
+        "status": "internal_error",
+    }

@@ -12,28 +12,26 @@ implementation. Status reflects the `0.1.0` release.
    adapter, and full test coverage. CRS consistency, datum-shift,
    axis-order, attribute, batch-processing, and reporting building blocks
    are also implemented as library services (see [docs/index.md](index.md)).
-4. **Delivery adapters** — *in progress.* The HTTP contract is stable for
-   `POST /api/geometry/validate` (see [docs/api.md](api.md)). The CLI exposes
-   the dataset-level `audit` workflow (see [docs/cli.md](cli.md));
-   wiring the scanner/detector/batch services to CLI subcommands is not yet
-   done.
+4. **Delivery adapters** — *done.* The CLI exposes CRS scanning, datum-shift
+   and axis-order detection, deterministic batch auditing, and atomic HTML
+   reports in addition to the canonical `audit` workflow. Commands share
+   deterministic output and the `0`/`1`/`2`/`3` exit-code contract documented
+   in [docs/cli.md](cli.md).
 5. **Web workflow** — *done for the shipped slice.* The `apps/web` React
    client integrates with `POST /api/geometry/validate`, including loading,
    error, empty, responsive, and dark-mode states.
-6. **Production hardening** — *in progress.* Done: request/response
-   validation, upload size and feature-count limits, filename and
-   extension/driver validation, structured CI (lint, type check, test,
-   dependency audit) and Dependabot. Not yet done: authentication, rate
-   limiting, observability (structured logs, metrics, correlation IDs), and
-   asynchronous job execution for large datasets — see
-   [Deployment guidance](api.md#deployment-guidance) for the current
-   mitigation (place these at a reverse proxy).
+6. **Production hardening** — *done for process-local deployment.* Typed
+   settings, production-safe authentication, fixed-window rate limiting,
+   request correlation, structured redacted logs, bounded metrics, hardened
+   uploads, and asynchronous validation jobs are implemented. Rate counters,
+   metrics, and jobs are non-durable and not shared across workers;
+   [deployment guidance](api.md#deployment-guidance) documents replacement
+   with shared external services.
 
-## Not yet started
+## Remaining roadmap
 
-- CLI subcommands for CRS scanning, datum-shift detection, axis-order
-  detection, batch processing, and HTML report generation.
 - Additional committed geospatial fixtures for uncommon drivers and malformed
   files, extending the generated datasets already covered by
   `tests/integration/`.
-- Authentication, rate limiting, and observability for the optional API.
+- Durable distributed job, rate-limit, and metrics backends for horizontally
+  scaled deployments.

@@ -9,20 +9,48 @@ python -m pip install "geoqc[api]"
 python -m uvicorn geoqc.interfaces.api.main:app --host 127.0.0.1 --port 8000
 ```
 
-The service binds to `127.0.0.1` by default in the example above. It has no
-authentication, rate limiting, or TLS built in — see
-[Deployment guidance](#deployment-guidance) before exposing it beyond your
-own machine.
+The service binds to `127.0.0.1` in the example above. It includes configurable
+API-key/Bearer authentication, process-local rate limiting, request IDs,
+structured logs, metrics, and asynchronous validation jobs. TLS and durable,
+distributed state remain deployment responsibilities.
 
 ## Configuration
 
-The service reads two optional environment variables (see
-[.env.example](../.env.example)):
+Settings are typed and validated at application construction (see
+[.env.example](../.env.example)). Production mode refuses to start if
+authentication is disabled, no credential is configured, or a configured
+credential is shorter than 16 characters.
 
 | Variable            | Default       | Effect                                                                 |
 | ------------------- | ------------- | ----------------------------------------------------------------------- |
 | `GEOQC_ENVIRONMENT` | `development` | Set to `production` to disable `/docs`, `/redoc`, and `/openapi.json`. |
 | `GEOQC_LOG_LEVEL`   | `INFO`        | Standard library logging level applied at startup.                     |
+| `GEOQC_AUTH_ENABLED` | `false` locally, `true` in production | Enable API-key/Bearer authentication. |
+| `GEOQC_API_KEYS` | empty | Comma-separated API keys accepted through `X-API-Key`. |
+| `GEOQC_BEARER_TOKENS` | empty | Comma-separated Bearer tokens. |
+| `GEOQC_RATE_LIMIT_REQUESTS` | `120` | General requests per fixed window and client process. |
+| `GEOQC_RATE_LIMIT_EXPENSIVE_REQUESTS` | `20` | Upload/job requests per fixed window. |
+| `GEOQC_RATE_LIMIT_WINDOW_SECONDS` | `60` | Fixed-window duration. |
+| `GEOQC_MAX_UPLOAD_BYTES` | `104857600` | Decoded upload cap. |
+| `GEOQC_MAX_FEATURES` | `1000000` | Validation feature cap. |
+| `GEOQC_MAX_REPORTED_FEATURES` | `1000` | Maximum findings returned. |
+| `GEOQC_MAX_REPAIR_FEATURES` | `50000` | In-memory repair cap. |
+| `GEOQC_TEMPORARY_DIRECTORY` | system default | Isolated upload workspace parent. |
+| `GEOQC_ASYNC_THRESHOLD_BYTES` | `10485760` | Size at which clients should prefer jobs. |
+| `GEOQC_JOB_WORKERS` | `2` | Local job worker threads. |
+| `GEOQC_JOB_RETENTION_SECONDS` | `3600` | Terminal job retention. |
+| `GEOQC_METRICS_ENABLED` | `true` | Expose bounded process metrics. |
+| `GEOQC_STREAMING_CHUNK_SIZE` | `16384` | Validation streaming chunk size. |
+
+Credentials are compared in constant time and are never included in responses
+or structured logs. Missing credentials return `401` with
+`WWW-Authenticate`; invalid credentials return `403`. Authentication is
+explicitly disabled by default only in development/test deployments.
+
+Every response accepts or generates `X-Request-ID`. The same identifier is
+used in structured request logs and attached to asynchronous jobs. User data,
+authorization values, uploaded bytes, filenames, and temporary paths are not
+logged.
 
 ## Endpoints
 
@@ -88,8 +116,10 @@ exceptions are logged server-side and never returned to the client (see
 `tests/unit/interfaces/test_api.py`).
 
 **Rejected formats:** KML and GML are intentionally not accepted, because
-XML-based formats can introduce external-entity/resource risks. Use a
-converted GeoJSON, GeoPackage, or Shapefile instead.
+XML-based formats can introduce external-entity/resource risks. Archives are
+also rejected in full, so no archive member, symlink, traversal path, or
+decompression payload is ever extracted. Use a converted GeoJSON, GeoPackage,
+or Shapefile instead.
 
 ### `POST /api/geometry/repair`
 
@@ -145,6 +175,29 @@ Repair uses the same `400`, `413`, and `422` error families as validation. A
 `413` is also returned when the repair-specific 50,000-feature limit is
 exceeded.
 
+### Asynchronous validation jobs
+
+Clients handling datasets above `GEOQC_ASYNC_THRESHOLD_BYTES` should submit the
+same validation body to `POST /api/jobs/geometry/validate`. The API returns
+`202` with an opaque job ID, request ID, initial `queued` state, and status URL.
+Poll `GET /api/jobs/{job_id}` for the transitions
+`queued → running → succeeded | failed`. Successful jobs contain the normal
+validation response; failures contain only `Job processing failed.` and never
+a traceback. Unknown or expired IDs return `404`.
+
+Job records, rate-limit counters, and metrics are process-local and in memory.
+They are neither durable nor shared across workers. Run one application worker
+for coherent status/rate behavior, or replace these components with shared
+external services. Terminal jobs expire after the configured retention period;
+isolated upload directories are deleted on success or failure.
+
+### `GET /metrics`
+
+Returns Prometheus-compatible process metrics for request count/duration and
+status, upload rejection, audit outcome, and job states. Labels are bounded to
+known method/route/status/state values; filenames, paths, request IDs, tokens,
+and other user-controlled strings are never labels.
+
 ### `GET /docs`, `GET /redoc`, `GET /openapi.json`
 
 Interactive OpenAPI documentation, enabled by default and disabled when
@@ -153,12 +206,11 @@ Interactive OpenAPI documentation, enabled by default and disabled when
 ## Deployment guidance
 
 The API is designed to sit behind infrastructure you control. For any
-deployment reachable outside your own machine, add at your reverse proxy or
-gateway:
+deployment reachable outside your own machine, also configure:
 
-- Authentication and authorization.
-- Rate limiting and request-size enforcement (in addition to the 100 MiB
-  application-level cap).
+- Shared rate limiting when using multiple application workers, plus gateway
+  request-size enforcement.
+- A durable external queue and job store when jobs must survive restarts.
 - TLS termination.
 - Structured access logging.
 - `GEOQC_ENVIRONMENT=production` to disable the interactive API docs.

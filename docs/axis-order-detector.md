@@ -47,6 +47,15 @@ and source metadata can damage data that was actually correct.
 
 ## Usage example
 
+```bash
+geoqc axis-order --bounds 106.7 -6.3 106.9 -6.1 --json
+```
+
+Only `correct` returns `0`; `likely_swapped`, `ambiguous`, and `invalid` are
+quality failures (`1`). Malformed/non-finite/non-positive bounds return `2`.
+
+Python:
+
 ```python
 from geoqc.application.services import AxisOrderDetector
 from geoqc.domain.models import CoordinateBounds, GeographicBounds

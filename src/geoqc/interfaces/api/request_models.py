@@ -173,6 +173,29 @@ class GeospatialValidationResponse(BaseModel):
     findings_truncated: bool
 
 
+class JobCreationResponse(BaseModel):
+    """Accepted process-local validation job."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str
+    state: Literal["queued"]
+    status_url: str
+    request_id: str
+
+
+class JobStatusResponse(BaseModel):
+    """Current state and optional terminal output of one job."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str
+    state: Literal["queued", "running", "succeeded", "failed"]
+    request_id: str
+    result: dict[str, object] | None = None
+    error: str | None = None
+
+
 class RepairActionResponse(BaseModel):
     """One repair step applied to a geometry."""
 

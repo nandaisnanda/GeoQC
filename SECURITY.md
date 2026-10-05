@@ -55,6 +55,7 @@ Out of scope:
   FastAPI, etc.) — please report those upstream. If a dependency
   vulnerability is directly exploitable through GeoQC's own code paths, we
   still want to hear about it here.
-- Denial of service against a deployment that ignores the deployment
-  guidance in [README.md](README.md) (running the API on a public interface
-  without a reverse proxy, authentication, or rate limiting).
+- Denial of service against a deployment that ignores the multi-worker and
+  gateway guidance in [docs/api.md](docs/api.md). The built-in authentication,
+  rate limiting, metrics, and jobs are process-local controls, not a substitute
+  for shared edge enforcement or a durable queue in a scaled deployment.
