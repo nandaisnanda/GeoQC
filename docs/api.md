@@ -28,17 +28,28 @@ credential is shorter than 16 characters.
 | `GEOQC_AUTH_ENABLED` | `false` locally, `true` in production | Enable API-key/Bearer authentication. |
 | `GEOQC_API_KEYS` | empty | Comma-separated API keys accepted through `X-API-Key`. |
 | `GEOQC_BEARER_TOKENS` | empty | Comma-separated Bearer tokens. |
+| `GEOQC_TRUST_PROXY_HEADERS` | `false` | Honor `X-Forwarded-For` only from an allowlisted proxy. |
+| `GEOQC_TRUSTED_PROXY_ADDRESSES` | empty | Comma-separated trusted proxy IP addresses. |
 | `GEOQC_RATE_LIMIT_REQUESTS` | `120` | General requests per fixed window and client process. |
 | `GEOQC_RATE_LIMIT_EXPENSIVE_REQUESTS` | `20` | Upload/job requests per fixed window. |
 | `GEOQC_RATE_LIMIT_WINDOW_SECONDS` | `60` | Fixed-window duration. |
+| `GEOQC_RATE_LIMIT_MAX_IDENTITIES` | `10000` | Maximum local identity buckets; oldest buckets are evicted. |
+| `GEOQC_MAX_REQUEST_BYTES` | `146800640` | Early `Content-Length` request cap. |
 | `GEOQC_MAX_UPLOAD_BYTES` | `104857600` | Decoded upload cap. |
 | `GEOQC_MAX_FEATURES` | `1000000` | Validation feature cap. |
 | `GEOQC_MAX_REPORTED_FEATURES` | `1000` | Maximum findings returned. |
 | `GEOQC_MAX_REPAIR_FEATURES` | `50000` | In-memory repair cap. |
+| `GEOQC_ALLOWED_EXTENSIONS` | safe vector allowlist | Enabled upload extensions. |
+| `GEOQC_ALLOWED_DRIVERS` | safe driver allowlist | Enabled detected GDAL drivers. |
+| `GEOQC_MAX_ARCHIVE_MEMBERS` | `100` | Reserved extraction bound; archives are rejected. |
+| `GEOQC_MAX_EXTRACTED_ARCHIVE_BYTES` | `262144000` | Reserved extraction-size bound; archives are rejected. |
 | `GEOQC_TEMPORARY_DIRECTORY` | system default | Isolated upload workspace parent. |
 | `GEOQC_ASYNC_THRESHOLD_BYTES` | `10485760` | Size at which clients should prefer jobs. |
 | `GEOQC_JOB_WORKERS` | `2` | Local job worker threads. |
+| `GEOQC_JOB_QUEUE_CAPACITY` | `32` | Waiting jobs in addition to active workers. |
+| `GEOQC_JOB_MAX_RECORDS` | `10000` | Maximum retained local job records. |
 | `GEOQC_JOB_RETENTION_SECONDS` | `3600` | Terminal job retention. |
+| `GEOQC_JOB_CLEANUP_INTERVAL_SECONDS` | `60` | Periodic terminal-record cleanup interval. |
 | `GEOQC_METRICS_ENABLED` | `true` | Expose bounded process metrics. |
 | `GEOQC_STREAMING_CHUNK_SIZE` | `16384` | Validation streaming chunk size. |
 
@@ -51,6 +62,12 @@ Every response accepts or generates `X-Request-ID`. The same identifier is
 used in structured request logs and attached to asynchronous jobs. User data,
 authorization values, uploaded bytes, filenames, and temporary paths are not
 logged.
+
+Rate-limit keys use an authenticated credential fingerprint when available and
+otherwise the direct client IP. `X-Forwarded-For` is ignored unless proxy
+handling is explicitly enabled and the direct peer is allowlisted. Expired
+counters are removed and identity storage is bounded. The limit remains per
+process, not a distributed global limit.
 
 ## Endpoints
 
@@ -111,9 +128,10 @@ more invalid features exist than are listed.
 | `413`  | Upload exceeds 100 MiB, or the dataset exceeds 1,000,000 features.       |
 | `422`  | File content does not match its extension, the dataset could not be parsed, or it has no geometry column. |
 
-Error bodies use FastAPI's standard `{"detail": "..."}` shape. Internal
-exceptions are logged server-side and never returned to the client (see
-`tests/unit/interfaces/test_api.py`).
+All client errors contain `error_code`, `message`, `request_id`, and the legacy
+`detail` alias. The response `X-Request-ID` matches the body. Internal
+exceptions are logged server-side and returned only as a generic `500` message
+(see `tests/unit/interfaces/test_api.py`).
 
 **Rejected formats:** KML and GML are intentionally not accepted, because
 XML-based formats can introduce external-entity/resource risks. Archives are
@@ -190,13 +208,19 @@ They are neither durable nor shared across workers. Run one application worker
 for coherent status/rate behavior, or replace these components with shared
 external services. Terminal jobs expire after the configured retention period;
 isolated upload directories are deleted on success or failure.
+Admission is bounded by worker, queue, and retained-record limits. A full queue
+returns `429` with `Retry-After`; queued inputs are staged on disk instead of
+retaining raw upload bytes in the job registry. Cleanup also runs periodically.
 
 ### `GET /metrics`
 
 Returns Prometheus-compatible process metrics for request count/duration and
-status, upload rejection, audit outcome, and job states. Labels are bounded to
-known method/route/status/state values; filenames, paths, request IDs, tokens,
-and other user-controlled strings are never labels.
+status class, upload rejection, audit outcome, rate-limit rejection, job states,
+and terminal job duration. Labels are bounded to known method, route, status
+class, and state values; filenames, paths, request IDs, tokens, and other
+user-controlled strings are never labels. The endpoint uses the same
+authentication policy as other routes; disabling metrics produces the
+structured `404` error contract.
 
 ### `GET /docs`, `GET /redoc`, `GET /openapi.json`
 

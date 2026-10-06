@@ -38,6 +38,14 @@ means invalid input, and `3` means an unexpected internal failure. Batch uses
 the highest per-item code and continues after invalid or failed files. The CLI
 disables pretty tracebacks and sanitizes unexpected failures.
 
+`crs-scan` sorts dataset identifiers before selecting its first valid CRS
+baseline, so JSON content and quality decisions are independent of argument
+order. Batch discovery likewise sorts resolved paths, rejects direct
+symbolic-link inputs, skips linked folder entries, and never accepts a resolved
+candidate outside the directory being scanned. Each batch item contains
+`source`, `exit_code`, `message`, and the canonical audit `result`; processing
+continues after per-item failures and the highest item exit code is returned.
+
 All five delivery commands support concise human output and deterministic JSON
 with `--json`:
 

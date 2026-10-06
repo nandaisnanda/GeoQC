@@ -21,8 +21,12 @@ class CrsConsistencyScanner:
 
     def scan(self, sources: Iterable[DatasetSource]) -> CrsAuditResult:
         """Read every source and return a complete audit without failing fast."""
+        ordered_sources = sorted(
+            sources,
+            key=lambda source: (source.uri.casefold(), (source.layer or "").casefold()),
+        )
         metadata: list[DatasetCrsMetadata | DatasetCrsAudit] = []
-        for source in sources:
+        for source in ordered_sources:
             try:
                 metadata.append(self._reader.read(source))
             except DatasetMetadataReadError as error:

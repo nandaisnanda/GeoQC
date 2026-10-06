@@ -13,6 +13,9 @@ from geoqc.application.services import (
     CrsConsistencyScanner,
     DatumShiftDetector,
 )
+from geoqc.domain.models import DatumShiftSample, DatumTransformationEvidence
+from geoqc.infrastructure.gis.pyproj_datum_inspector import PyprojDatumTransformationInspector
+from geoqc.infrastructure.reporting import HtmlReportRenderer
 from geoqc.interfaces.cli import delivery
 from geoqc.interfaces.cli.main import app
 
@@ -74,6 +77,9 @@ def test_axis_order_and_invalid_arguments() -> None:
     assert swapped.exit_code == 1
     assert json.loads(swapped.stdout)["status"] == "likely_swapped"
     assert RUNNER.invoke(app, ["axis-order", "--bounds", "0", "0", "0", "0"]).exit_code == 2
+    ambiguous = RUNNER.invoke(app, ["axis-order", "--bounds", "1", "2", "3", "4", "--json"])
+    assert ambiguous.exit_code == 1
+    assert json.loads(ambiguous.stdout)["status"] == "ambiguous"
     assert RUNNER.invoke(app, ["axis-order", "--bounds", "bad"]).exit_code == 2
     assert RUNNER.invoke(app, ["crs-scan", "--unknown"]).exit_code == 2
 
@@ -87,6 +93,42 @@ def test_datum_shift() -> None:
     assert RUNNER.invoke(app, [*args, "--grid-size", "1"]).exit_code == 2
     args[1] = "invalid-crs"
     assert RUNNER.invoke(app, args).exit_code == 2
+
+
+def test_suspicious_datum_shift_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    evidence = DatumTransformationEvidence(
+        source_crs="EPSG:4267",
+        target_crs="EPSG:4326",
+        operation_name="test operation",
+        declared_accuracy_m=1.0,
+        best_operation_available=True,
+        uses_ballpark_transformation=False,
+        missing_grids=(),
+        samples=(DatumShiftSample(0, 0, 0.001, 0, 111.0),),
+    )
+    monkeypatch.setattr(
+        PyprojDatumTransformationInspector,
+        "inspect",
+        lambda *args, **kwargs: evidence,
+    )
+    result = RUNNER.invoke(
+        app,
+        [
+            "datum-shift",
+            "EPSG:4267",
+            "EPSG:4326",
+            "--bounds",
+            "-1",
+            "-1",
+            "1",
+            "1",
+            "--json",
+        ],
+    )
+    assert result.exit_code == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "abnormal"
+    assert payload["maximum_shift_m"] == 111.0
 
 
 def test_batch_partial_failure_and_empty_folder(dataset: Path, tmp_path: Path) -> None:
@@ -116,6 +158,22 @@ def test_batch_recursive_discovery_and_missing_crs(tmp_path: Path) -> None:
     assert item["result"]["issues"][0]["code"] == "META-MISSING_CRS"
 
 
+def test_crs_scan_is_order_independent_and_preserves_missing_crs(tmp_path: Path) -> None:
+    wgs84 = tmp_path / "z-wgs84.gpkg"
+    mercator = tmp_path / "a-mercator.gpkg"
+    missing = tmp_path / "m-missing.gpkg"
+    gpd.GeoDataFrame(geometry=[Point(1, 2)], crs="EPSG:4326").to_file(wgs84)
+    gpd.GeoDataFrame(geometry=[Point(1, 2)], crs="EPSG:3857").to_file(mercator)
+    gpd.GeoDataFrame(geometry=[Point(1, 2)]).to_file(missing)
+
+    first = RUNNER.invoke(app, ["crs-scan", str(wgs84), str(missing), str(mercator), "--json"])
+    second = RUNNER.invoke(app, ["crs-scan", str(mercator), str(wgs84), str(missing), "--json"])
+    assert first.exit_code == second.exit_code == 1
+    assert first.stdout == second.stdout
+    statuses = [item["status"] for item in json.loads(first.stdout)["datasets"]]
+    assert statuses == ["consistent", "missing", "mismatch"]
+
+
 def test_html_creation_overwrite_and_quality_gate(dataset: Path, tmp_path: Path) -> None:
     target = tmp_path / "nested" / "report.html"
     args = ["html-report", str(dataset), str(target), "--json"]
@@ -143,6 +201,24 @@ def test_html_creation_overwrite_and_quality_gate(dataset: Path, tmp_path: Path)
     )
     assert report.exit_code == 1
     assert json.loads(report.stdout)["quality_gate"] == "failed"
+
+
+def test_html_atomic_failure_preserves_existing_file(
+    dataset: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    destination = tmp_path / "report.html"
+    destination.write_text("keep me", encoding="utf-8")
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise OSError("simulated renderer failure")
+
+    monkeypatch.setattr(HtmlReportRenderer, "write", fail)
+    result = RUNNER.invoke(
+        app,
+        ["html-report", str(dataset), str(destination), "--overwrite", "--json"],
+    )
+    assert result.exit_code == 2
+    assert destination.read_text(encoding="utf-8") == "keep me"
 
 
 @pytest.mark.parametrize("command", ["batch", "html-report"])

@@ -87,11 +87,21 @@ def _validate_filename(name: str) -> None:
 
 
 def _validate_component_set(
-    components: dict[str, bytes], requested_layer: str | None
+    components: dict[str, bytes],
+    requested_layer: str | None,
+    *,
+    allowed_extensions: tuple[str, ...] | None = None,
 ) -> _DatasetSelection:
     """Select exactly one supported dataset and reject mixed components."""
     names = tuple(components)
     suffixes = {Path(name).suffix for name in names}
+    configured = frozenset(allowed_extensions or (*_SINGLE_FILE_DRIVERS, ".shp"))
+    primary_suffixes = suffixes & (frozenset(_SINGLE_FILE_DRIVERS) | {".shp"})
+    if not primary_suffixes <= configured:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported extension: {', '.join(sorted(primary_suffixes - configured))}",
+        )
     if ".shp" in suffixes or len(names) > 1:
         unsupported = suffixes - _ALLOWED_SHAPEFILE_SUFFIXES
         if unsupported:
@@ -148,14 +158,23 @@ def _resolve_layer(dataset_path: Path, requested_layer: str | None) -> str | Non
 
 
 def _verify_dataset(
-    dataset_path: Path, layer: str | None, *, max_features: int = _MAX_FEATURES
+    dataset_path: Path,
+    layer: str | None,
+    *,
+    max_features: int = _MAX_FEATURES,
+    allowed_drivers: tuple[str, ...] | None = None,
 ) -> None:
     """Verify the detected GDAL driver and reject oversized datasets before loading."""
     info = pyogrio.read_info(dataset_path, layer=layer)
     detected_driver = str(info.get("driver", ""))
     suffix = dataset_path.suffix
     expected = frozenset({"ESRI Shapefile"}) if suffix == ".shp" else _SINGLE_FILE_DRIVERS[suffix]
-    if detected_driver not in expected:
+    configured = frozenset(
+        allowed_drivers
+        or {driver for values in _SINGLE_FILE_DRIVERS.values() for driver in values}
+        | {"ESRI Shapefile"}
+    )
+    if detected_driver not in expected or detected_driver not in configured:
         raise HTTPException(
             status_code=422,
             detail="The file content does not match the dataset extension.",
