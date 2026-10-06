@@ -57,7 +57,9 @@ def validate_payload(
 ) -> GeospatialValidationResponse:
     """Canonical synchronous validation used by HTTP and local job workers."""
     components = _decode_components(payload.files, max_upload_bytes=settings.max_upload_bytes)
-    selection = _validate_component_set(components, payload.layer)
+    selection = _validate_component_set(
+        components, payload.layer, allowed_extensions=settings.allowed_extensions
+    )
     with TemporaryDirectory(
         prefix="geoqc-",
         dir=str(settings.temporary_directory) if settings.temporary_directory else None,
@@ -68,7 +70,12 @@ def validate_payload(
         dataset_path = directory / selection.filename
         try:
             layer = _resolve_layer(dataset_path, selection.layer)
-            _verify_dataset(dataset_path, layer, max_features=settings.max_features)
+            _verify_dataset(
+                dataset_path,
+                layer,
+                max_features=settings.max_features,
+                allowed_drivers=settings.allowed_drivers,
+            )
             source = DatasetSource(dataset_path, layer=layer)
             reader = default_reader_registry().resolve(source)
             metadata = reader.inspect(source)
@@ -135,7 +142,9 @@ def repair_geospatial(
     """Preview a safe repair for every geometry in one bounded coverage."""
     settings: ApiSettings = request.app.state.settings
     components = _decode_components(payload.files, max_upload_bytes=settings.max_upload_bytes)
-    selection = _validate_component_set(components, payload.layer)
+    selection = _validate_component_set(
+        components, payload.layer, allowed_extensions=settings.allowed_extensions
+    )
     with TemporaryDirectory(
         prefix="geoqc-",
         dir=str(settings.temporary_directory) if settings.temporary_directory else None,
@@ -146,7 +155,12 @@ def repair_geospatial(
         dataset_path = directory / selection.filename
         try:
             layer = _resolve_layer(dataset_path, selection.layer)
-            _verify_dataset(dataset_path, layer, max_features=settings.max_features)
+            _verify_dataset(
+                dataset_path,
+                layer,
+                max_features=settings.max_features,
+                allowed_drivers=settings.allowed_drivers,
+            )
             frame = _read_frame(dataset_path, layer, max_features=settings.max_repair_features)
             geometries = _frame_geometries(frame)
             coverage = repair_geometries(geometries, payload.options.to_domain())

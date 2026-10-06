@@ -20,7 +20,9 @@ Recognized extensions by default:
 Extension matching is case-insensitive. Discovered files are converted to
 absolute paths, deduplicated, and sorted so batch results are deterministic.
 Folders are scanned one level deep by default; pass `recursive=True` to
-include subfolders.
+include subfolders. Symbolic-link inputs and symbolic-link files discovered
+inside folders are rejected or skipped, and resolved candidates must remain
+inside the directory being scanned.
 
 An explicit file input with an unsupported extension raises `ValueError`; a
 path that does not exist raises `FileNotFoundError`. Unsupported files found

@@ -43,6 +43,8 @@ class BatchProcessor[ResultT]:
             path = Path(raw_input).expanduser()
             if not path.exists():
                 raise FileNotFoundError(f"Batch input does not exist: {path}")
+            if self._is_link(path):
+                raise ValueError(f"Symbolic links are not accepted as batch inputs: {path}")
             if path.is_file():
                 if not self._is_supported(path):
                     raise ValueError(f"Unsupported dataset file: {path}")
@@ -51,11 +53,15 @@ class BatchProcessor[ResultT]:
             if not path.is_dir():
                 raise ValueError(f"Batch input is neither a file nor a directory: {path}")
 
+            root = path.resolve()
             candidates = path.rglob("*") if recursive else path.glob("*")
             discovered.update(
                 candidate.resolve()
                 for candidate in candidates
-                if candidate.is_file() and self._is_supported(candidate)
+                if candidate.is_file()
+                and not self._is_link(candidate)
+                and candidate.resolve().is_relative_to(root)
+                and self._is_supported(candidate)
             )
         return tuple(sorted(discovered, key=lambda item: str(item).casefold()))
 
@@ -97,6 +103,10 @@ class BatchProcessor[ResultT]:
 
     def _is_supported(self, path: Path) -> bool:
         return path.suffix.casefold() in self._supported_suffixes
+
+    @staticmethod
+    def _is_link(path: Path) -> bool:
+        return path.is_symlink() or path.is_junction()
 
     @staticmethod
     def _normalize_suffix(suffix: str) -> str:
