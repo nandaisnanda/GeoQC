@@ -17,6 +17,7 @@ _ROUTES = frozenset(
         "/metrics",
     }
 )
+_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"})
 
 
 class MetricsRegistry:
@@ -27,6 +28,7 @@ class MetricsRegistry:
         self._duration: dict[tuple[str, str], float] = defaultdict(float)
         self._events: Counter[str] = Counter()
         self._jobs: Counter[str] = Counter()
+        self._job_duration: dict[str, float] = defaultdict(float)
         self._lock = Lock()
 
     @staticmethod
@@ -35,12 +37,19 @@ class MetricsRegistry:
 
     def observe_request(self, method: str, route: str, status: int, duration: float) -> None:
         normalized = self.route_label(route)
+        normalized_method = method if method in _METHODS else "OTHER"
+        status_class = f"{status // 100}xx" if 100 <= status <= 599 else "other"
         with self._lock:
-            self._requests[(method, normalized, str(status))] += 1
-            self._duration[(method, normalized)] += duration
+            self._requests[(normalized_method, normalized, status_class)] += 1
+            self._duration[(normalized_method, normalized)] += max(0.0, duration)
 
     def event(self, name: str) -> None:
-        if name not in {"upload_rejected", "audit_succeeded", "audit_failed"}:
+        if name not in {
+            "upload_rejected",
+            "audit_succeeded",
+            "audit_failed",
+            "rate_limit_rejected",
+        }:
             raise ValueError("unsupported metric event")
         with self._lock:
             self._events[name] += 1
@@ -50,6 +59,12 @@ class MetricsRegistry:
             raise ValueError("unsupported job state")
         with self._lock:
             self._jobs[state] += 1
+
+    def observe_job_duration(self, state: str, duration: float) -> None:
+        if state not in {"succeeded", "failed"}:
+            raise ValueError("job duration requires a terminal state")
+        with self._lock:
+            self._job_duration[state] += max(0.0, duration)
 
     def render(self) -> str:
         """Render a small Prometheus-compatible text exposition."""
@@ -70,4 +85,8 @@ class MetricsRegistry:
                 lines.append(f"geoqc_{name}_total {value}")
             for state, value in sorted(self._jobs.items()):
                 lines.append(f'geoqc_jobs_total{{state="{state}"}} {value}')
+            for state, duration_sum in sorted(self._job_duration.items()):
+                lines.append(
+                    f'geoqc_job_duration_seconds_sum{{state="{state}"}} {duration_sum:.9f}'
+                )
         return "\n".join(lines) + "\n"

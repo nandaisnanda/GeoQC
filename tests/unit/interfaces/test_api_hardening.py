@@ -1,23 +1,30 @@
 """Focused production-hardening contracts for the optional API."""
 
+import asyncio
 import base64
 import json
 import logging
 from pathlib import Path
 from threading import Event, Thread
 from time import monotonic
+from typing import cast
 
 import geopandas as gpd  # type: ignore[import-untyped]
 import pytest
 from fastapi.testclient import TestClient
 from shapely.geometry import Point
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from geoqc.interfaces.api import job_routes
 from geoqc.interfaces.api.app import create_app
-from geoqc.interfaces.api.jobs import JobManager, JobState
+from geoqc.interfaces.api.jobs import JobManager, JobQueueFullError, JobState
 from geoqc.interfaces.api.metrics import MetricsRegistry
-from geoqc.interfaces.api.operations import JsonFormatter
-from geoqc.interfaces.api.rate_limit import FixedWindowRateLimiter
+from geoqc.interfaces.api.operations import (
+    JsonFormatter,
+    RequestBodyTooLargeError,
+    RequestSizeLimitMiddleware,
+)
+from geoqc.interfaces.api.rate_limit import FixedWindowRateLimiter, InMemoryRateLimitStorage
 from geoqc.interfaces.api.settings import ApiSettings, EnvironmentMode
 
 
@@ -79,6 +86,39 @@ def test_authentication_is_disabled_locally_and_production_fails_closed() -> Non
         ApiSettings(environment=EnvironmentMode.PRODUCTION, authentication_enabled=True)
 
 
+def test_settings_load_every_security_boundary_and_redact_secrets() -> None:
+    settings = ApiSettings.from_env(
+        {
+            "GEOQC_ENVIRONMENT": "test",
+            "GEOQC_AUTH_ENABLED": "true",
+            "GEOQC_API_KEYS": "do-not-print-this-key",
+            "GEOQC_TRUST_PROXY_HEADERS": "true",
+            "GEOQC_TRUSTED_PROXY_ADDRESSES": "127.0.0.1,10.0.0.1",
+            "GEOQC_JOB_QUEUE_CAPACITY": "7",
+            "GEOQC_JOB_CLEANUP_INTERVAL_SECONDS": "9",
+            "GEOQC_ALLOWED_EXTENSIONS": ".geojson,.gpkg",
+            "GEOQC_ALLOWED_DRIVERS": "GeoJSON,GPKG",
+            "GEOQC_MAX_ARCHIVE_MEMBERS": "12",
+            "GEOQC_MAX_EXTRACTED_ARCHIVE_BYTES": "4096",
+        }
+    )
+
+    assert settings.trusted_proxy_addresses == ("127.0.0.1", "10.0.0.1")
+    assert settings.job_queue_capacity == 7
+    assert settings.allowed_extensions == (".geojson", ".gpkg")
+    assert settings.max_archive_members == 12
+    assert "do-not-print-this-key" not in repr(settings)
+    with pytest.raises(ValueError, match="greater than zero"):
+        ApiSettings.from_env({"GEOQC_RATE_LIMIT_REQUESTS": "0"})
+    with pytest.raises(ValueError, match="proxy addresses"):
+        ApiSettings(
+            environment=EnvironmentMode.PRODUCTION,
+            authentication_enabled=True,
+            api_keys=("a-production-secret",),
+            trust_proxy_headers=True,
+        )
+
+
 def test_missing_and_invalid_credentials_are_distinct() -> None:
     settings = _settings(authentication_enabled=True, api_keys=("a-secure-api-key",))
     with TestClient(create_app(settings)) as client:
@@ -89,6 +129,27 @@ def test_missing_and_invalid_credentials_are_distinct() -> None:
     assert missing.headers["www-authenticate"]
     assert invalid.status_code == 403
     assert valid.status_code == 200
+    assert missing.json()["request_id"] == missing.headers["x-request-id"]
+    assert invalid.json()["error_code"] == "invalid_credential"
+
+
+def test_bearer_credentials_have_independent_rate_limit_identities() -> None:
+    settings = ApiSettings(
+        environment=EnvironmentMode.TEST,
+        authentication_enabled=True,
+        bearer_tokens=("token-one-is-secure", "token-two-is-secure"),
+        rate_limit_requests=1,
+        rate_limit_expensive_requests=1,
+    )
+    with TestClient(create_app(settings)) as client:
+        first = client.get("/metrics", headers={"Authorization": "Bearer token-one-is-secure"})
+        limited = client.get("/metrics", headers={"Authorization": "Bearer token-one-is-secure"})
+        independent = client.get(
+            "/metrics", headers={"Authorization": "Bearer token-two-is-secure"}
+        )
+    assert first.status_code == 200
+    assert limited.status_code == 429
+    assert independent.status_code == 200
 
 
 def test_rate_limit_exhaustion_and_clock_recovery() -> None:
@@ -105,12 +166,27 @@ def test_rate_limit_exhaustion_and_clock_recovery() -> None:
         assert client.get("/openapi.json").status_code == 200
 
 
+def test_rate_limit_storage_is_bounded_and_cleans_expired_identities() -> None:
+    storage = InMemoryRateLimitStorage(max_entries=2)
+    limiter = FixedWindowRateLimiter(storage=storage, clock=lambda: 0.0)
+    limiter.check("a", limit=1, window_seconds=10)
+    limiter.check("b", limit=1, window_seconds=10)
+    limiter.check("c", limit=1, window_seconds=10)
+    assert storage.size == 2
+    assert storage.cleanup(10.0, 10) == 2
+    assert storage.size == 0
+
+
 def test_request_id_generation_propagation_and_log_redaction() -> None:
     with TestClient(create_app(_settings())) as client:
         generated = client.get("/metrics")
         accepted = client.get("/metrics", headers={"X-Request-ID": "client-request-42"})
+        unsafe_id = "x" * 129
+        normalized = client.get("/metrics", headers={"X-Request-ID": unsafe_id})
     assert len(generated.headers["x-request-id"]) == 32
     assert accepted.headers["x-request-id"] == "client-request-42"
+    assert normalized.headers["x-request-id"] != unsafe_id
+    assert len(normalized.headers["x-request-id"]) == 32
 
     record = logging.LogRecord("geoqc.api", logging.INFO, "", 0, "complete", (), None)
     record.request_id = "safe-id"
@@ -125,8 +201,13 @@ def test_request_id_generation_propagation_and_log_redaction() -> None:
 def test_metrics_have_bounded_labels() -> None:
     registry = MetricsRegistry()
     registry.observe_request("GET", "/user/supplied/value", 418, 0.25)
+    registry.event("rate_limit_rejected")
+    registry.observe_job_duration("failed", 0.5)
     rendered = registry.render()
     assert 'route="other"' in rendered
+    assert 'status="4xx"' in rendered
+    assert "geoqc_rate_limit_rejected_total 1" in rendered
+    assert 'geoqc_job_duration_seconds_sum{state="failed"} 0.500000000' in rendered
     assert "/user/supplied/value" not in rendered
 
 
@@ -153,11 +234,13 @@ def test_async_job_success_concurrent_reads_and_temporary_cleanup(tmp_path: Path
         job_result = terminal["result"]
         assert isinstance(job_result, dict)
         assert job_result["feature_count"] == 1
+        assert terminal["request_id"] == created.headers["x-request-id"]
         assert responses == [200, 200, 200, 200]
         assert list(temporary.iterdir()) == []
 
 
 def test_async_job_failure_and_invalid_id_are_sanitized(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fail(*args: object, **kwargs: object) -> None:
@@ -165,7 +248,8 @@ def test_async_job_failure_and_invalid_id_are_sanitized(
 
     monkeypatch.setattr(job_routes, "validate_payload", fail)
     payload = {"files": [{"name": "broken.geojson", "content_base64": "e30="}]}
-    with TestClient(create_app(_settings())) as client:
+    temporary = tmp_path / "failed-jobs"
+    with TestClient(create_app(_settings(temporary_directory=temporary))) as client:
         created = client.post("/api/jobs/geometry/validate", json=payload)
         terminal = _wait_for_terminal(client, created.json()["status_url"])
         missing = client.get("/api/jobs/not-a-real-job")
@@ -173,6 +257,8 @@ def test_async_job_failure_and_invalid_id_are_sanitized(
     assert terminal["error"] == "Job processing failed."
     assert "secret" not in json.dumps(terminal)
     assert missing.status_code == 404
+    assert missing.json()["request_id"] == missing.headers["x-request-id"]
+    assert list(temporary.iterdir()) == []
 
 
 def test_job_state_transitions_and_retention_cleanup() -> None:
@@ -209,6 +295,62 @@ def test_job_state_transitions_and_retention_cleanup() -> None:
     manager.close()
 
 
+def test_job_queue_capacity_rejects_without_unbounded_growth() -> None:
+    started = Event()
+    release = Event()
+    manager = JobManager(
+        workers=1,
+        queue_capacity=1,
+        retention_seconds=60,
+        metrics=MetricsRegistry(),
+    )
+
+    def blocking() -> dict[str, object]:
+        started.set()
+        assert release.wait(timeout=2)
+        return {"ok": True}
+
+    manager.submit("one", blocking)
+    assert started.wait(timeout=2)
+    manager.submit("two", lambda: {"ok": True})
+    with pytest.raises(JobQueueFullError, match="queue is full"):
+        manager.submit("three", lambda: {"ok": True})
+    release.set()
+    manager.close()
+
+
+def test_full_job_queue_returns_429_and_removes_staged_upload(tmp_path: Path) -> None:
+    started = Event()
+    release = Event()
+    temporary = tmp_path / "queue"
+    temporary.mkdir()
+    manager = JobManager(
+        workers=1,
+        queue_capacity=1,
+        retention_seconds=60,
+        metrics=MetricsRegistry(),
+    )
+
+    def blocking() -> dict[str, object]:
+        started.set()
+        assert release.wait(timeout=2)
+        return {"ok": True}
+
+    manager.submit("one", blocking)
+    assert started.wait(timeout=2)
+    manager.submit("two", lambda: {"ok": True})
+    payload = {"files": [{"name": "queued.geojson", "content_base64": "e30="}]}
+    with TestClient(
+        create_app(_settings(temporary_directory=temporary), job_manager=manager)
+    ) as client:
+        response = client.post("/api/jobs/geometry/validate", json=payload)
+        release.set()
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "1"
+    assert response.json()["error_code"] == "too_many_requests"
+    assert list(temporary.iterdir()) == []
+
+
 def test_configured_upload_and_feature_limits(tmp_path: Path) -> None:
     source = tmp_path / "two.geojson"
     _dataset(source, count=2)
@@ -233,3 +375,60 @@ def test_archives_and_traversal_members_are_not_accepted() -> None:
         response = client.post("/api/geometry/validate", json=payload)
     assert response.status_code == 400
     assert "Unsupported extension" in response.json()["detail"]
+
+
+def test_configured_format_and_request_limits_are_enforced() -> None:
+    restricted = ApiSettings(
+        environment=EnvironmentMode.TEST,
+        allowed_extensions=(".geojson",),
+        allowed_drivers=("GeoJSON",),
+    )
+    payload = {"files": [{"name": "data.gpkg", "content_base64": "e30="}]}
+    with TestClient(create_app(restricted)) as client:
+        rejected = client.post("/api/geometry/validate", json=payload)
+    assert rejected.status_code == 400
+
+    tiny = ApiSettings(environment=EnvironmentMode.TEST, max_request_bytes=1)
+    with TestClient(create_app(tiny)) as client:
+        oversized = client.post("/api/geometry/validate", json=payload)
+    assert oversized.status_code == 413
+    assert oversized.json()["error_code"] == "request_too_large"
+
+
+def test_streaming_request_limit_does_not_depend_on_content_length() -> None:
+    async def scenario() -> None:
+        async def downstream(_scope: Scope, receive: Receive, _send: Send) -> None:
+            await receive()
+
+        messages = iter(
+            [
+                {"type": "http.request", "body": b"12", "more_body": True},
+                {"type": "http.request", "body": b"34", "more_body": False},
+            ]
+        )
+
+        async def receive() -> Message:
+            return cast(Message, next(messages))
+
+        async def send(_message: Message) -> None:
+            return None
+
+        middleware = RequestSizeLimitMiddleware(cast(ASGIApp, downstream), max_bytes=1)
+        with pytest.raises(RequestBodyTooLargeError):
+            await middleware(cast(Scope, {"type": "http"}), receive, send)
+
+    asyncio.run(scenario())
+
+
+def test_disabled_metrics_returns_structured_not_found() -> None:
+    with TestClient(
+        create_app(ApiSettings(environment=EnvironmentMode.TEST, metrics_enabled=False))
+    ) as client:
+        response = client.get("/metrics", headers={"X-Request-ID": "metrics-disabled"})
+    assert response.status_code == 404
+    assert response.json() == {
+        "error_code": "not_found",
+        "message": "Metrics are disabled.",
+        "request_id": "metrics-disabled",
+        "detail": "Metrics are disabled.",
+    }

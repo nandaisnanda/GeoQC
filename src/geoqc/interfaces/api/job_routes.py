@@ -1,16 +1,23 @@
 """HTTP adapter for process-local dataset validation jobs."""
 
+import base64
+import shutil
+from pathlib import Path
+from tempfile import mkdtemp
+
 from fastapi import APIRouter, HTTPException, Request, status
 
 from geoqc.interfaces.api.geometry_routes import validate_payload
-from geoqc.interfaces.api.jobs import JobManager
+from geoqc.interfaces.api.jobs import JobManager, JobQueueFullError
 from geoqc.interfaces.api.operations import REQUEST_ID
 from geoqc.interfaces.api.request_models import (
     GeospatialValidationRequest,
     JobCreationResponse,
     JobStatusResponse,
+    UploadedFile,
 )
 from geoqc.interfaces.api.settings import ApiSettings
+from geoqc.interfaces.api.upload_security import _decode_components, _validate_component_set
 
 router = APIRouter()
 
@@ -26,13 +33,55 @@ def create_validation_job(
     """Queue a validation job while retaining the synchronous endpoint."""
     manager: JobManager = request.app.state.job_manager
     settings: ApiSettings = request.app.state.settings
-    # Pydantic models are immutable enough for read-only worker use, but a
-    # deep copy makes the thread ownership explicit.
-    job_payload = payload.model_copy(deep=True)
-    record = manager.submit(
-        REQUEST_ID.get(),
-        lambda: validate_payload(job_payload, settings).model_dump(mode="json"),
+    components = _decode_components(payload.files, max_upload_bytes=settings.max_upload_bytes)
+    _validate_component_set(
+        components, payload.layer, allowed_extensions=settings.allowed_extensions
     )
+    directory = Path(
+        mkdtemp(
+            prefix="geoqc-job-",
+            dir=str(settings.temporary_directory) if settings.temporary_directory else None,
+        )
+    )
+    try:
+        for name, content in components.items():
+            (directory / name).write_bytes(content)
+    except OSError:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise
+    filenames = tuple(upload.name for upload in payload.files)
+    requested_layer = payload.layer
+
+    def operation() -> dict[str, object]:
+        try:
+            staged = GeospatialValidationRequest(
+                files=[
+                    UploadedFile(
+                        name=name,
+                        content_base64=base64.b64encode(
+                            (directory / name.casefold()).read_bytes()
+                        ).decode("ascii"),
+                    )
+                    for name in filenames
+                ],
+                layer=requested_layer,
+            )
+            return validate_payload(staged, settings).model_dump(mode="json")
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    try:
+        record = manager.submit(REQUEST_ID.get(), operation)
+    except JobQueueFullError as error:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise HTTPException(
+            status_code=429,
+            detail="The job queue is full; retry later.",
+            headers={"Retry-After": "1"},
+        ) from error
+    except RuntimeError:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise
     return JobCreationResponse(
         job_id=record.job_id,
         state="queued",

@@ -7,8 +7,9 @@ multiple vector datasets without loading their feature rows.
 
 1. Read CRS metadata through an application port.
 2. Normalize CRS definitions to canonical WKT2:2019 in the infrastructure adapter.
-3. Select the first dataset with a valid CRS as a deterministic baseline.
-4. Classify every input while preserving input order.
+3. Sort inputs by case-insensitive dataset identifier.
+4. Select the first sorted dataset with a valid CRS as the deterministic baseline.
+5. Classify every input in that stable order.
 5. Return an immutable audit result suitable for CLI, API, or report adapters.
 
 ## Status model

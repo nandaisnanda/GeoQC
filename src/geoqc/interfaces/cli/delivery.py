@@ -129,7 +129,19 @@ def batch(
                 if item.value is not None
                 else ({"status": "internal_error", "error": "Unexpected internal failure."}, 3)
             )
-            items.append({"source": item.source, "exit_code": item_code, "result": payload})
+            message = (
+                "Audit completed."
+                if item_code in {0, 1}
+                else str(payload.get("error", "Dataset processing failed."))
+            )
+            items.append(
+                {
+                    "source": item.source,
+                    "exit_code": item_code,
+                    "message": message,
+                    "result": payload,
+                }
+            )
             code = max(code, item_code)
         return {"items": items, "total": result.total}, code
 

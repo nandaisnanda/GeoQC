@@ -13,6 +13,12 @@ All notable changes to GeoQC are documented here. This project follows
   the canonical router-based application.
 - Disabled checks consistently report `Check not selected by quality profile.`
   Legacy argument and wrapper deprecations are explicitly tested.
+- CRS scan baselines and output are now independent of argument ordering, and
+  batch discovery rejects unsafe symbolic-link traversal while retaining stable
+  per-item messages and aggregate exit-code precedence.
+- API errors now carry a safe code, message, and request ID; rate-limit and job
+  storage are bounded; queued upload bytes are staged in isolated temporary
+  directories; and metrics use fixed status classes plus rate/job-duration data.
 
 ### Added
 

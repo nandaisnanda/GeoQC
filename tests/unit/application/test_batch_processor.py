@@ -99,6 +99,24 @@ def test_discover_rejects_missing_and_explicitly_unsupported_inputs(tmp_path: Pa
         processor.discover([unsupported])
 
 
+def test_discovery_rejects_direct_symlinks_and_skips_linked_folder_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    linked = _touch(tmp_path / "linked.gpkg")
+    regular = _touch(tmp_path / "regular.gpkg")
+    original = Path.is_symlink
+    monkeypatch.setattr(
+        Path,
+        "is_symlink",
+        lambda path: path.name == "linked.gpkg" or original(path),
+    )
+    processor = BatchProcessor[str](lambda path: path.name)
+
+    with pytest.raises(ValueError, match="Symbolic links"):
+        processor.discover([linked])
+    assert processor.discover([tmp_path]) == (regular.resolve(),)
+
+
 @pytest.mark.parametrize("suffixes", [[], [" "]])
 def test_processor_rejects_invalid_suffix_configuration(suffixes: list[str]) -> None:
     with pytest.raises(ValueError, match="suffix"):

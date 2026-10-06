@@ -21,9 +21,10 @@ implementation. Status reflects the `0.1.0` release.
    client integrates with `POST /api/geometry/validate`, including loading,
    error, empty, responsive, and dark-mode states.
 6. **Production hardening** — *done for process-local deployment.* Typed
-   settings, production-safe authentication, fixed-window rate limiting,
-   request correlation, structured redacted logs, bounded metrics, hardened
-   uploads, and asynchronous validation jobs are implemented. Rate counters,
+   settings, production-safe authentication, bounded identity-aware rate
+   limiting, request correlation, one structured error contract, structured
+   redacted logs, bounded low-cardinality metrics, hardened uploads, and
+   bounded asynchronous validation jobs are implemented. Rate counters,
    metrics, and jobs are non-durable and not shared across workers;
    [deployment guidance](api.md#deployment-guidance) documents replacement
    with shared external services.

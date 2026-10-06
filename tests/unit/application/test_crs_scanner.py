@@ -35,7 +35,8 @@ def test_scanner_reports_consistent_datasets() -> None:
     result = scanner.scan(sources)
 
     assert result.is_consistent is True
-    assert result.baseline == DatasetCrsMetadata(sources[0], WGS84)
+    assert result.baseline == DatasetCrsMetadata(sources[1], WGS84)
+    assert [item.source for item in result.datasets] == [sources[1], sources[0]]
     assert [item.status for item in result.datasets] == [
         CrsAuditStatus.CONSISTENT,
         CrsAuditStatus.CONSISTENT,
@@ -58,14 +59,23 @@ def test_scanner_identifies_different_crs_against_first_valid_baseline() -> None
 
     result = scanner.scan([missing, baseline, mismatch])
 
-    assert result.baseline == DatasetCrsMetadata(baseline, WGS84)
+    assert result.baseline == DatasetCrsMetadata(mismatch, WEB_MERCATOR)
     assert [item.status for item in result.datasets] == [
-        CrsAuditStatus.MISSING,
         CrsAuditStatus.CONSISTENT,
+        CrsAuditStatus.MISSING,
         CrsAuditStatus.MISMATCH,
     ]
-    assert [item.source for item in result.mismatched_datasets] == [mismatch]
-    assert "EPSG:3857" in (result.mismatched_datasets[0].message or "")
+    assert [item.source for item in result.mismatched_datasets] == [baseline]
+    assert "EPSG:4326" in (result.mismatched_datasets[0].message or "")
+
+
+def test_scanner_result_does_not_depend_on_input_order() -> None:
+    sources = [DatasetSource("z.gpkg"), DatasetSource("a.gpkg")]
+    scanner = CrsConsistencyScanner(
+        FakeReader({sources[0].identifier: WGS84, sources[1].identifier: WEB_MERCATOR})
+    )
+
+    assert scanner.scan(sources) == scanner.scan(reversed(sources))
 
 
 def test_scanner_keeps_read_error_in_audit_and_continues() -> None:
