@@ -1,0 +1,66 @@
+{
+  "output": "C:\\Users\\ACER\\Downloads\\Jobs\\Portofolio\\GeoQC\\testdata\\qc repaired 5class road.gpkg",
+  "crs": "EPSG:32749",
+  "configuration": {
+    "snap_tolerance_metres": 0.1,
+    "minimum_segment_length_metres": 1e-08
+  },
+  "input_feature_counts": {
+    "existing_repaired_3class": 537,
+    "jalanlingkungan": 2794,
+    "jalansetapak": 173,
+    "total": 3504
+  },
+  "repair": {
+    "input_part_count": 3540,
+    "snapped_endpoint_count": 78,
+    "output_segment_count": 7717,
+    "output_class_counts": {
+      "jalanlingkungan": 5392,
+      "jalanlokal": 1544,
+      "jalansetapak": 313,
+      "jalankolektor": 252,
+      "jalanarteri": 216
+    },
+    "multi_class_segment_count": 4,
+    "passes": [
+      {
+        "pass": 1,
+        "input_part_count": 3540,
+        "snapped_endpoint_count": 78,
+        "output_segment_count": 7718,
+        "near_gap_endpoint_count": 2
+      }
+    ],
+    "targeted_near_gap_snap_count": 2,
+    "targeted_near_gap_distances_metres": [
+      0.003625230156914521,
+      0.011569403907064837
+    ]
+  },
+  "audit_before": {
+    "feature_count": 3504,
+    "line_part_count": 3540,
+    "invalid_feature_count": 0,
+    "non_simple_feature_count": 2,
+    "unnoded_intersection_pair_count": 3933,
+    "linear_overlap_pair_count": 3,
+    "near_gap_endpoint_count": 80,
+    "exact_duplicate_segment_count": 2,
+    "total_length": 671922.3673547325,
+    "minimum_segment_length": 2.6116860720258015e-05
+  },
+  "audit_after": {
+    "feature_count": 7717,
+    "line_part_count": 7717,
+    "invalid_feature_count": 0,
+    "non_simple_feature_count": 0,
+    "unnoded_intersection_pair_count": 0,
+    "linear_overlap_pair_count": 0,
+    "near_gap_endpoint_count": 0,
+    "exact_duplicate_segment_count": 0,
+    "total_length": 671895.7424515359,
+    "minimum_segment_length": 1.0001017994045356e-07
+  },
+  "verification_passed": true
+}
