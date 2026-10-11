@@ -6,6 +6,7 @@ from shapely.geometry.base import BaseGeometry
 from geoqc.domain.models.spatial_intelligence import (
     BoundarySnapConfig,
     Recommendation,
+    RoadComponentConnectionConfig,
     RoadIssueType,
     RoadNetworkConfig,
     RoadNetworkRepairConfig,
@@ -15,6 +16,7 @@ from geoqc.domain.models.spatial_intelligence import (
 from geoqc.infrastructure.gis.shapely_spatial_intelligence import (
     ShapelyBoundarySnapper,
     ShapelyRoadNetworkAnalyzer,
+    ShapelyRoadNetworkConnector,
     ShapelyRoadNetworkRepairer,
     ShapelySmallPolygonAnalyzer,
 )
@@ -22,6 +24,7 @@ from geoqc.infrastructure.gis.shapely_spatial_intelligence import (
 SpatialEngine = (
     ShapelyBoundarySnapper
     | ShapelyRoadNetworkAnalyzer
+    | ShapelyRoadNetworkConnector
     | ShapelyRoadNetworkRepairer
     | ShapelySmallPolygonAnalyzer
 )
@@ -148,6 +151,68 @@ def test_road_repair_endpoint_cluster_never_exceeds_snap_tolerance() -> None:
     )
 
 
+def test_road_connector_builds_minimum_spanning_connectors() -> None:
+    roads = [
+        LineString([(0, 0), (1, 0)]),
+        LineString([(3, 0), (4, 0)]),
+        LineString([(10, 0), (11, 0)]),
+    ]
+
+    result = ShapelyRoadNetworkConnector().connect(
+        [_wkt(item) for item in roads], RoadComponentConnectionConfig()
+    )
+
+    assert result.initial_component_count == 3
+    assert result.remaining_component_count == 1
+    assert result.connector_count == 2
+    assert result.connector_total_length == pytest.approx(8)
+    assert result.fully_connected
+    assert result.to_dict()["connectors"]
+
+
+def test_road_connector_honors_distance_limit_and_connected_input() -> None:
+    disconnected = [LineString([(0, 0), (1, 0)]), LineString([(3, 0), (4, 0)])]
+    limited = ShapelyRoadNetworkConnector().connect(
+        [_wkt(item) for item in disconnected],
+        RoadComponentConnectionConfig(max_connection_distance=1),
+    )
+    connected = ShapelyRoadNetworkConnector().connect(
+        [_wkt(LineString([(0, 0), (1, 0)])), _wkt(LineString([(1, 0), (2, 0)]))],
+        RoadComponentConnectionConfig(),
+    )
+
+    assert limited.connector_count == 0
+    assert limited.remaining_component_count == 2
+    assert not limited.fully_connected
+    assert connected.initial_component_count == 1
+    assert connected.remaining_component_count == 1
+    exact = ShapelyRoadNetworkConnector().connect(
+        [_wkt(LineString([(0, 0), (1, 0)])), _wkt(LineString([(1, 0), (2, 0)]))],
+        RoadComponentConnectionConfig(node_tolerance=0),
+    )
+    empty = ShapelyRoadNetworkConnector().connect([], RoadComponentConnectionConfig())
+    assert exact.initial_component_count == 1
+    assert empty.initial_component_count == 0
+    assert empty.fully_connected
+
+
+def test_road_connector_handles_multilines_and_rejects_invalid_inputs() -> None:
+    multiline = MultiLineString([[(0, 0), (1, 0)], [(2, 0), (3, 0)]])
+    result = ShapelyRoadNetworkConnector().connect(
+        [_wkt(multiline)], RoadComponentConnectionConfig()
+    )
+
+    assert result.input_feature_count == 1
+    assert result.input_part_count == 2
+    assert result.connector_count == 1
+    with pytest.raises(ValueError, match="only line"):
+        ShapelyRoadNetworkConnector().connect(
+            [_wkt(box(0, 0, 1, 1))], RoadComponentConnectionConfig()
+        )
+    with pytest.raises(ValueError, match="positive"):
+        RoadComponentConnectionConfig(max_connection_distance=0)
+
+
 def test_small_polygon_analyzer_classifies_and_previews_recommendations() -> None:
     polygons = [
         box(0, 0, 10, 10),
@@ -180,6 +245,7 @@ def test_small_polygon_analyzer_classifies_and_previews_recommendations() -> Non
     [
         (ShapelyBoundarySnapper(), "LINESTRING (0 0, 1 1)"),
         (ShapelyRoadNetworkAnalyzer(), "POLYGON ((0 0, 1 0, 1 1, 0 0))"),
+        (ShapelyRoadNetworkConnector(), "POLYGON ((0 0, 1 0, 1 1, 0 0))"),
         (ShapelyRoadNetworkRepairer(), "POLYGON ((0 0, 1 0, 1 1, 0 0))"),
         (ShapelySmallPolygonAnalyzer(), "LINESTRING (0 0, 1 1)"),
     ],
@@ -192,6 +258,8 @@ def test_engines_reject_wrong_geometry_family(engine: SpatialEngine, wkt: str) -
             engine.analyze([wkt], RoadNetworkConfig())
         elif isinstance(engine, ShapelyRoadNetworkRepairer):
             engine.repair([wkt], RoadNetworkRepairConfig())
+        elif isinstance(engine, ShapelyRoadNetworkConnector):
+            engine.connect([wkt], RoadComponentConnectionConfig())
         else:
             assert isinstance(engine, ShapelySmallPolygonAnalyzer)
             engine.analyze([wkt], SmallPolygonConfig())

@@ -53,6 +53,8 @@ All notable changes to GeoQC are documented here. This project follows
 
 - Public `repair_road_network` API with conservative endpoint snapping, full
   intersection noding, and source-feature provenance.
+- Public `connect_road_components` API with endpoint-based component detection,
+  minimum-length connector planning, and an optional maximum connection distance.
 - Safe `geoqc repair-roads` file workflow with attribute preservation, atomic
   GeoPackage output, CRS/layer/size validation, overwrite protection, and an
   optional JSON report.

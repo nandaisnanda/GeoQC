@@ -51,16 +51,45 @@
     "minimum_segment_length": 2.6116860720258015e-05
   },
   "audit_after": {
-    "feature_count": 7717,
-    "line_part_count": 7717,
+    "feature_count": 7874,
+    "line_part_count": 7874,
     "invalid_feature_count": 0,
     "non_simple_feature_count": 0,
     "unnoded_intersection_pair_count": 0,
     "linear_overlap_pair_count": 0,
     "near_gap_endpoint_count": 0,
     "exact_duplicate_segment_count": 0,
-    "total_length": 671895.7424515359,
-    "minimum_segment_length": 1.0001017994045356e-07
+    "total_length": 676453.6142837997,
+    "minimum_segment_length": 2.6116860720258015e-05
   },
-  "verification_passed": true
+  "verification_passed": true,
+  "connectivity_repair": {
+    "initial_component_count": 47,
+    "final_component_count": 1,
+    "connector_count": 46,
+    "connector_total_length_metres": 4603.051070130328,
+    "connector_minimum_length_metres": 0.11167711372726062,
+    "connector_maximum_length_metres": 1278.987508796303,
+    "connectors_over_100_metres": 6,
+    "output_segment_count": 7874,
+    "output_connector_segment_count": 85,
+    "output_layer_counts": {
+      "jalanarteri": 218,
+      "jalankolektor": 259,
+      "jalanlokal": 1557,
+      "jalanlingkungan": 5441,
+      "jalansetapak": 314,
+      "qc_connectors": 85
+    },
+    "targeted_near_gap_snap_count": 4,
+    "critical_validation": {
+      "invalid": 0,
+      "non_simple": 0,
+      "unnoded_intersection": 0,
+      "broken_connection": 0,
+      "linear_overlap": 0,
+      "duplicate_edge": 0,
+      "connected_components": 1
+    }
+  }
 }

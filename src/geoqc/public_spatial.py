@@ -20,6 +20,8 @@ from geoqc.domain.models.enterprise_spatial import (
 from geoqc.domain.models.spatial_intelligence import (
     BoundarySnapConfig,
     BoundarySnapResult,
+    RoadComponentConnectionConfig,
+    RoadComponentConnectionResult,
     RoadNetworkConfig,
     RoadNetworkRepairConfig,
     RoadNetworkRepairResult,
@@ -35,6 +37,7 @@ from geoqc.infrastructure.gis.shapely_enterprise_spatial import (
 from geoqc.infrastructure.gis.shapely_spatial_intelligence import (
     ShapelyBoundarySnapper,
     ShapelyRoadNetworkAnalyzer,
+    ShapelyRoadNetworkConnector,
     ShapelyRoadNetworkRepairer,
     ShapelySmallPolygonAnalyzer,
 )
@@ -42,6 +45,7 @@ from geoqc.public_helpers import require_geometry, to_wkt
 
 _boundary_snapper = ShapelyBoundarySnapper()
 _road_analyzer = ShapelyRoadNetworkAnalyzer()
+_road_connector = ShapelyRoadNetworkConnector()
 _road_repairer = ShapelyRoadNetworkRepairer()
 _small_polygon_analyzer = ShapelySmallPolygonAnalyzer()
 _duplicate_detector = ShapelySpatialDuplicateDetector()
@@ -98,6 +102,17 @@ def analyze_road_network(
     return _road_analyzer.analyze(
         [to_wkt(require_geometry(item)) for item in geometries],
         config or RoadNetworkConfig(),
+    )
+
+
+def connect_road_components(
+    geometries: Sequence[BaseGeometry],
+    config: RoadComponentConnectionConfig | None = None,
+) -> RoadComponentConnectionResult:
+    """Plan minimum-length connectors between disconnected road components."""
+    return _road_connector.connect(
+        [to_wkt(require_geometry(item)) for item in geometries],
+        config or RoadComponentConnectionConfig(),
     )
 
 
