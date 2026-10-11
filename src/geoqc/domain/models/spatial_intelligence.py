@@ -180,6 +180,74 @@ class RoadNetworkRepairResult:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class RoadComponentConnectionConfig:
+    """Settings for connecting disconnected road-network components."""
+
+    node_tolerance: float = 1e-8
+    max_connection_distance: float | None = None
+
+    def __post_init__(self) -> None:
+        _non_negative("node_tolerance", self.node_tolerance)
+        if self.max_connection_distance is not None and self.max_connection_distance <= 0:
+            raise ValueError("max_connection_distance must be positive when provided")
+
+
+@dataclass(frozen=True, slots=True)
+class RoadComponentConnector:
+    """A minimum-length line proposed between two network components."""
+
+    connector_index: int
+    source_component: int
+    target_component: int
+    geometry_wkt: str
+    length: float
+
+
+@dataclass(frozen=True, slots=True)
+class RoadComponentConnectionResult:
+    """Connector plan that reduces or eliminates disconnected road islands."""
+
+    input_feature_count: int
+    input_part_count: int
+    initial_component_count: int
+    remaining_component_count: int
+    connectors: tuple[RoadComponentConnector, ...]
+
+    @property
+    def connector_count(self) -> int:
+        return len(self.connectors)
+
+    @property
+    def connector_total_length(self) -> float:
+        return sum(item.length for item in self.connectors)
+
+    @property
+    def fully_connected(self) -> bool:
+        return self.remaining_component_count <= 1
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "input_feature_count": self.input_feature_count,
+            "input_part_count": self.input_part_count,
+            "initial_component_count": self.initial_component_count,
+            "remaining_component_count": self.remaining_component_count,
+            "connector_count": self.connector_count,
+            "connector_total_length": self.connector_total_length,
+            "fully_connected": self.fully_connected,
+            "connectors": [
+                {
+                    "connector_index": item.connector_index,
+                    "source_component": item.source_component,
+                    "target_component": item.target_component,
+                    "geometry_wkt": item.geometry_wkt,
+                    "length": item.length,
+                }
+                for item in self.connectors
+            ],
+        }
+
+
 class SmallPolygonIssueType(StrEnum):
     SLIVER_POLYGON = "sliver_polygon"
     TINY_ISLAND = "tiny_island"
