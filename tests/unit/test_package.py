@@ -73,3 +73,15 @@ def test_public_road_repair_returns_noded_segments() -> None:
 
     assert result.snapped_endpoint_count == 1
     assert result.output_segment_count == 5
+
+
+def test_public_road_component_connector_eliminates_islands() -> None:
+    """The top-level connector API exposes a fully connected minimum plan."""
+    roads = [LineString([(0, 0), (1, 0)]), LineString([(3, 0), (4, 0)])]
+
+    result = geoqc.connect_road_components(roads)
+
+    assert result.initial_component_count == 2
+    assert result.remaining_component_count == 1
+    assert result.connector_count == 1
+    assert result.fully_connected

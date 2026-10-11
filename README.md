@@ -41,8 +41,9 @@ library always agree on what is valid. See [Architecture](docs/architecture.md).
   Shapefile, GeoJSON, GeoPackage, and FlatGeobuf.
 - Analyze and repair road networks, including every `MultiLineString` part,
   dangling/broken connections, duplicate segments, unnoded intersections,
-  conservative endpoint snapping, full intersection noding, and source-feature
-  provenance. The `geoqc repair-roads` CLI writes a new GeoPackage atomically.
+  conservative endpoint snapping, full intersection noding, minimum connector
+  planning for disconnected islands, and source-feature provenance. The
+  `geoqc repair-roads` CLI writes a new GeoPackage atomically.
 - Apply declarative Phase-2 topology checks for matching boundaries, connected
   endpoints, overshoot/undershoot, geometry types, multipart features, spikes,
   minimum segment/vertex spacing, spatial relations, attribute-controlled

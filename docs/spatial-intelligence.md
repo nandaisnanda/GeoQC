@@ -89,6 +89,33 @@ provenance can contain multiple source indices when the input contains duplicate
 or overlapping linework. Repair output is 2D because GEOS topology operations
 do not use Z; preserve elevation attributes separately when working with 3D data.
 
+## Road Component Connector
+
+`connect_road_components` detects endpoint-connected components and creates a
+minimum spanning set of shortest connector lines. Add those lines to the source
+network and run `repair_road_network` with zero snap tolerance to split every
+connector at its exact attachment point.
+
+```python
+plan = geoqc.connect_road_components(
+    repaired_lines,
+    geoqc.RoadComponentConnectionConfig(
+        node_tolerance=1e-8,
+        max_connection_distance=None,
+    ),
+)
+connectors = [shapely.from_wkt(item.geometry_wkt) for item in plan.connectors]
+connected = geoqc.repair_road_network(
+    [*repaired_lines, *connectors],
+    geoqc.RoadNetworkRepairConfig(snap_tolerance=0),
+)
+print(plan.initial_component_count, plan.remaining_component_count)
+```
+
+The default has no distance ceiling and therefore connects every component.
+Set `max_connection_distance` for conservative workflows where distant islands
+must remain flagged for manual review. Connector lengths use the input CRS unit.
+
 For file-to-file repair, use the CLI. It preserves source attributes, adds
 `_geoqc_segment`, `_geoqc_sources`, `_geoqc_length`, and `_geoqc_layer` audit
 columns, and writes the result atomically to a new GeoPackage:
