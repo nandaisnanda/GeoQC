@@ -14,6 +14,7 @@ from geoqc.domain.models.quality_workflow import (
     TopologyRule,
     TopologyRuleType,
 )
+from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
 from geoqc.infrastructure.gis.topology_rule_helpers import _issue, _metadata_value
 
 AttributeValue = str | int | float | bool | None
@@ -23,17 +24,25 @@ def _relation_issues(
     source: Sequence[BaseGeometry], reference: Sequence[BaseGeometry], rule: TopologyRule
 ) -> list[DatasetIssue]:
     tree = STRtree(reference) if reference else None
+    finite_reference = [_has_finite_coordinates(item) for item in reference]
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(source):
-        candidates = [] if tree is None else [int(item) for item in tree.query(geometry)]
+        if not _has_finite_coordinates(geometry):
+            continue
+        candidates = (
+            []
+            if tree is None
+            else [int(item) for item in tree.query(geometry) if finite_reference[int(item)]]
+        )
         if rule.rule_type is TopologyRuleType.MUST_TOUCH:
             valid = any(geometry.touches(reference[item]) for item in candidates)
         elif rule.rule_type is TopologyRuleType.MUST_INTERSECT:
             valid = any(geometry.intersects(reference[item]) for item in candidates)
         else:
-            valid = any(
-                geometry.buffer(rule.tolerance).covers(reference[item]) for item in candidates
-            )
+            buffered = _safe_buffer(geometry, rule.tolerance)
+            if buffered is None:
+                continue
+            valid = any(buffered.covers(reference[item]) for item in candidates)
         if not valid:
             findings.append(
                 _issue(
@@ -69,12 +78,13 @@ def _attribute_overlap_issues(
         not reference_attributes or any(column not in item for item in reference_attributes)
     ):
         raise ValueError(f"attribute {column!r} is missing from layer {rule.reference_layer}")
+    finite_target = [_has_finite_coordinates(item) for item in target]
     for left, geometry in enumerate(source):
-        if tree is None:
+        if tree is None or not _has_finite_coordinates(geometry):
             continue
         for raw in tree.query(geometry):
             right = int(raw)
-            if reference is None and right <= left:
+            if (reference is None and right <= left) or not finite_target[right]:
                 continue
             overlap = geometry.intersection(target[right])
             if overlap.is_empty or overlap.area <= rule.tolerance:

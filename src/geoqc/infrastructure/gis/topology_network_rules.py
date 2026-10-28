@@ -11,6 +11,7 @@ from geoqc.domain.models.quality_workflow import (
     TopologyRule,
     TopologyRuleType,
 )
+from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
 from geoqc.infrastructure.gis.topology_rule_helpers import _issue, _line_records, _points, _unique
 
 AttributeValue = str | int | float | bool | None
@@ -19,11 +20,16 @@ AttributeValue = str | int | float | bool | None
 def _boundary_mismatch(
     source: Sequence[BaseGeometry], reference: Sequence[BaseGeometry], rule: TopologyRule
 ) -> list[DatasetIssue]:
-    target = shapely.union_all([item.boundary for item in reference if not item.is_empty])
+    target = shapely.union_all(
+        [item.boundary for item in reference if not item.is_empty and _has_finite_coordinates(item)]
+    )
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(source):
+        if not _has_finite_coordinates(geometry):
+            continue
         boundary = geometry.boundary
-        matched = target.buffer(rule.tolerance) if rule.tolerance else target
+        buffered = _safe_buffer(target, rule.tolerance) if rule.tolerance else None
+        matched = target if buffered is None else buffered
         mismatch = boundary.difference(matched)
         if mismatch.is_empty:
             continue

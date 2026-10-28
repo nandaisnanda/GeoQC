@@ -19,6 +19,7 @@ from geoqc.domain.models.spatial_intelligence import RoadIssueType, RoadNetworkC
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.shapely_geometry_validator import ShapelyGeometryValidator
 from geoqc.infrastructure.gis.shapely_spatial_intelligence import ShapelyRoadNetworkAnalyzer
+from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
 
 _GEOMETRY_DETAILS: Mapping[GeometryIssueType, tuple[str, str, Severity, RepairRisk]] = {
     GeometryIssueType.INVALID_GEOMETRY: (
@@ -173,11 +174,14 @@ def _duplicate_issues(
     tree = STRtree(items) if items else None
     if tree is None:
         return findings
+    finite = [_has_finite_coordinates(item) for item in items]
     for left, geometry in enumerate(items):
-        query = geometry.buffer(tolerance) if tolerance else geometry
+        query = _safe_buffer(geometry, tolerance) if tolerance else geometry
+        if not finite[left] or query is None:
+            continue
         for raw in tree.query(query):
             right = int(raw)
-            if right <= left:
+            if right <= left or not finite[right]:
                 continue
             duplicate = (
                 geometry.equals_exact(items[right], tolerance)
@@ -270,16 +274,25 @@ def _cross_layer_issues(
     source: Sequence[BaseGeometry], reference: Sequence[BaseGeometry], rule: TopologyRule
 ) -> list[DatasetIssue]:
     reference_tree = STRtree(reference) if reference else None
+    finite_reference = [_has_finite_coordinates(item) for item in reference]
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(source):
+        if not _has_finite_coordinates(geometry):
+            continue
         candidates = (
             []
             if reference_tree is None
-            else [int(value) for value in reference_tree.query(geometry)]
+            else [
+                int(value)
+                for value in reference_tree.query(geometry)
+                if finite_reference[int(value)]
+            ]
         )
         if rule.rule_type is TopologyRuleType.MUST_BE_INSIDE:
             valid = any(
-                reference[item].buffer(rule.tolerance).covers(geometry) for item in candidates
+                buffered.covers(geometry)
+                for item in candidates
+                if (buffered := _safe_buffer(reference[item], rule.tolerance)) is not None
             )
             if valid:
                 continue

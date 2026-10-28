@@ -8,6 +8,7 @@ from pyproj.exceptions import CRSError
 from shapely.geometry.base import BaseGeometry
 
 from geoqc.domain.models import CrsGuardResult, CrsUnitStatus
+from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates
 
 
 def assess_crs(crs: str | None, geometries: Sequence[BaseGeometry] = ()) -> CrsGuardResult:
@@ -53,7 +54,7 @@ def assess_crs(crs: str | None, geometries: Sequence[BaseGeometry] = ()) -> CrsG
 
 
 def _suggest_utm(geometries: Sequence[BaseGeometry]) -> str | None:
-    non_empty = [item for item in geometries if not item.is_empty]
+    non_empty = [item for item in geometries if not item.is_empty and _has_finite_coordinates(item)]
     if not non_empty:
         return None
     center = shapely.union_all(non_empty).centroid

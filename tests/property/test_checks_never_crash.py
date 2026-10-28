@@ -12,8 +12,10 @@ import geopandas as gpd  # type: ignore[import-untyped]
 import pyarrow as pa  # type: ignore[import-untyped]
 import pytest
 import shapely
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
+from shapely import from_wkt
+from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
 from geoqc.application.streaming.geometry import GeometryChunkResult
@@ -71,6 +73,11 @@ GEOMETRY_TYPES = (
     "GeometryCollection",
 )
 CRS_CHOICES = (None, "EPSG:4326", "EPSG:3857", "EPSG:32748")
+
+# Minimal inputs from crashes found by this suite. Each crashed at least one check.
+NAN_POLYGON = "POLYGON ((0 0, 0 1, 0 NaN, 0 0))"
+ALL_NAN_LINE = "LINESTRING (NaN NaN, NaN NaN)"
+OVERFLOW_POLYGON = "POLYGON ((0 0, 0 0, 0 1.7976931348623157e308, 0 1.7976931348623157e308, 0 0))"
 
 thresholds = st.one_of(
     st.sampled_from((0.0, 1e-12, 0.5, 1.0, 1e9)),
@@ -210,6 +217,34 @@ def quality_profiles(draw: st.DrawFn, dataset_name: str) -> QualityProfile:
     tolerance=thresholds,
     minimum_area=thresholds,
 )
+# GEOS equals() raised on NaN coordinates in the baseline duplicate check.
+@example(
+    geometries=[from_wkt(NAN_POLYGON), from_wkt("POLYGON ((0 0, 0 1, 0 0))")],
+    crs=None,
+    tolerance=0.0,
+    minimum_area=0.0,
+).via("regression")
+# buffer() on an all-NaN line segfaulted the point_survey tolerance duplicate check.
+@example(
+    geometries=[from_wkt(ALL_NAN_LINE), Point(0, 0)],
+    crs=None,
+    tolerance=1.0,
+    minimum_area=0.0,
+).via("regression")
+# buffer() overflowed to NaN on coordinates near the float limit.
+@example(
+    geometries=[from_wkt(OVERFLOW_POLYGON), Point(0, 0)],
+    crs=None,
+    tolerance=2.0,
+    minimum_area=0.0,
+).via("regression")
+# The UTM suggestion took the centroid of a NaN union and read X from an empty point.
+@example(
+    geometries=[from_wkt("LINESTRING (0 0, NaN 1)")],
+    crs="EPSG:4326",
+    tolerance=0.0,
+    minimum_area=0.0,
+).via("regression")
 def test_geometry_audit_never_crashes(
     preset: QualityPreset | None,
     geometries: Sequence[BaseGeometry],
@@ -234,6 +269,31 @@ def test_geometry_audit_never_crashes(
     source=dataset_layers("source"),
     reference=dataset_layers("reference"),
 )
+# Each example runs against every rule type.
+# buffer() on an all-NaN line segfaulted no_duplicate, must_be_inside, and must_cover.
+@example(
+    settings=RuleSettings(tolerance=1.0),
+    source=layer("source", ALL_NAN_LINE, "POINT (0 0)"),
+    reference=layer("reference", ALL_NAN_LINE, "POINT (0 0)"),
+).via("regression")
+# GEOS predicates raised on NaN polygons in relation, boundary, and overlap rules.
+@example(
+    settings=RuleSettings(tolerance=1.0),
+    source=layer("source", "POLYGON ((0 0, NaN 0, 0 0))", "POINT (0 0)"),
+    reference=layer("reference", NAN_POLYGON, "POLYGON ((0 0, 0 1, 0 0, 0 1, 0 0))"),
+).via("regression")
+# buffer() overflowed to NaN on coordinates near the float limit.
+@example(
+    settings=RuleSettings(tolerance=2.0),
+    source=layer("source", OVERFLOW_POLYGON, "POINT (0 0)"),
+    reference=layer("reference", OVERFLOW_POLYGON, "POINT (0 0)"),
+).via("regression")
+# Overshoot/undershoot intersected all-NaN multilines.
+@example(
+    settings=RuleSettings(tolerance=1e-12, use_reference=False),
+    source=layer("source", "MULTILINESTRING ((NaN NaN, NaN NaN), (NaN NaN, NaN NaN))"),
+    reference=layer("reference"),
+).via("regression")
 def test_topology_rule_never_crashes(
     rule_type: TopologyRuleType,
     settings: RuleSettings,
