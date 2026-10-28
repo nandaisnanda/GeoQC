@@ -89,11 +89,13 @@ def _overlap_issues(
     if tree is None:
         return findings
     for left, geometry in enumerate(items):
-        if geometry.is_empty:
+        # Invalid geometries are reported by the geometry checks; GEOS overlay
+        # operations can raise on them, so they are excluded here.
+        if geometry.is_empty or not geometry.is_valid:
             continue
         for raw in tree.query(geometry):
             right = int(raw)
-            if right <= left:
+            if right <= left or not items[right].is_valid:
                 continue
             overlap = geometry.intersection(items[right])
             if overlap.is_empty or overlap.area <= tolerance:
@@ -131,7 +133,7 @@ def _gap_issues(
     polygonal = [
         item
         for item in items
-        if item.geom_type in {"Polygon", "MultiPolygon"} and not item.is_empty
+        if item.geom_type in {"Polygon", "MultiPolygon"} and not item.is_empty and item.is_valid
     ]
     if not polygonal:
         return []

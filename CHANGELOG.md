@@ -22,6 +22,8 @@ All notable changes to GeoQC are documented here. This project follows
 
 ### Added
 
+- `examples/sample_defects.gpkg`, a 120 KB quick-start dataset with known
+  self-intersection, sliver, overlap, and disconnected-road defects.
 - Typed API configuration; API-key/Bearer authentication; process-local rate
   limiting; request correlation; structured, redacted logs; bounded metrics;
   and asynchronous validation jobs with retention and cleanup.
@@ -66,6 +68,10 @@ All notable changes to GeoQC are documented here. This project follows
 
 - Road analysis now inspects every `MultiLineString` part instead of only the
   longest part and reports unnoded crossings and T-junctions.
+
+- Overlap and gap checks no longer crash with a GEOS `TopologyException` when a
+  layer contains an invalid polygon. Invalid features are skipped there and
+  still reported by the geometry checks.
 
 ## [0.1.0] - 2026-07-26
 

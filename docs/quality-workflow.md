@@ -13,7 +13,11 @@ audit and returns the canonical `DatasetAuditResult`:
 ```python
 import geoqc
 
-result = geoqc.audit_dataset("data.gpkg", profile="road-network")
+result = geoqc.audit_dataset(
+    "examples/sample_defects.gpkg",
+    layer="roads",
+    profile="docs/examples/road-network-profile.yaml",
+)
 for check in result.checks:
     print(check.name, check.status, check.reason, check.issue_count)
 ```
