@@ -6,6 +6,13 @@ All notable changes to GeoQC are documented here. This project follows
 
 ## [Unreleased]
 
+### Security
+
+- Locked dependencies moved to the lowest releases without known advisories:
+  certifi 2026.10.19, opentelemetry-api 1.45.1 (`api` extra), and in the web
+  client undici 7.30.1, vite 8.3.3, and vitest 5.0.3. TypeScript in the web
+  client is capped below 7.
+
 ### Changed
 
 - Modular dataset auditing, profile validation, scoring, exports, and legacy wrappers
