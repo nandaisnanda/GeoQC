@@ -49,6 +49,27 @@ def test_road_preset_exposes_point_findings() -> None:
     assert result.issues_for_layer(geoqc.IssueGeometryKind.POINT)
 
 
+def test_road_preset_reports_non_line_features_instead_of_raising() -> None:
+    result = geoqc.audit_geometries(
+        [
+            Point(5, 5),
+            LineString([(0, 0), (1, 0)]),
+            LineString([(1.05, 0), (2, 0)]),
+        ],
+        preset="road",
+        crs="EPSG:3857",
+        tolerance=0.1,
+    )
+
+    unexpected = [issue for issue in result.issues if issue.code == "GEO-UNEXPECTED-TYPE"]
+    assert [issue.feature_index for issue in unexpected] == [0]
+    assert unexpected[0].category == "geometry"
+    road = [issue for issue in result.issues if issue.issue_type == "broken_connection"]
+    assert road
+    # Analyzer indices refer to the line subset; they must map back to the input.
+    assert {issue.feature_index for issue in road} <= {1, 2}
+
+
 def test_custom_cross_layer_rules_find_outside_and_forbidden_intersection() -> None:
     layers = (
         geoqc.DatasetLayer("buildings", (box(1, 1, 2, 2).wkt, box(20, 20, 21, 21).wkt)),

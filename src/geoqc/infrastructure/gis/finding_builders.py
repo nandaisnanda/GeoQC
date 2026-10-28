@@ -21,6 +21,8 @@ from geoqc.infrastructure.gis.shapely_geometry_validator import ShapelyGeometryV
 from geoqc.infrastructure.gis.shapely_spatial_intelligence import ShapelyRoadNetworkAnalyzer
 from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
 
+_ROAD_GEOMETRY_TYPES = frozenset({"LineString", "MultiLineString"})
+
 _GEOMETRY_DETAILS: Mapping[GeometryIssueType, tuple[str, str, Severity, RepairRisk]] = {
     GeometryIssueType.INVALID_GEOMETRY: (
         "Invalid geometry",
@@ -237,11 +239,35 @@ def _minimum_area_issues(
 
 
 def _road_issues(items: Sequence[BaseGeometry], layer: str, tolerance: float) -> list[DatasetIssue]:
-    if not items:
-        return []
+    findings = [
+        _issue(
+            code="GEO-UNEXPECTED-TYPE",
+            issue_type="unexpected_geometry_type",
+            title="Unexpected Geometry Type",
+            message=f"{geometry.geom_type} is not allowed by the road preset.",
+            severity=Severity.ERROR,
+            category="geometry",
+            recommendation="Convert the feature to one of: LineString, MultiLineString.",
+            risk=RepairRisk.REVIEW,
+            geometry=geometry,
+            layer=layer,
+            feature_index=index,
+        )
+        for index, geometry in enumerate(items)
+        if geometry.geom_type not in _ROAD_GEOMETRY_TYPES
+    ]
+    # NaN coordinates are reported as invalid geometry and would break the analyzer.
+    owners = [
+        index
+        for index, geometry in enumerate(items)
+        if geometry.geom_type in _ROAD_GEOMETRY_TYPES and _has_finite_coordinates(geometry)
+    ]
+    if not owners:
+        return findings
     config = RoadNetworkConfig(connection_tolerance=tolerance or 0.01)
-    report = ShapelyRoadNetworkAnalyzer().analyze(tuple(_wkt(item) for item in items), config)
-    findings = []
+    report = ShapelyRoadNetworkAnalyzer().analyze(
+        tuple(_wkt(items[index]) for index in owners), config
+    )
     for item in report.findings:
         risk = (
             RepairRisk.SAFE
@@ -260,8 +286,8 @@ def _road_issues(items: Sequence[BaseGeometry], layer: str, tolerance: float) ->
                 risk=risk,
                 geometry=shapely.from_wkt(item.location_wkt),
                 layer=layer,
-                feature_index=item.feature_indices[0] if item.feature_indices else None,
-                related_feature_index=item.feature_indices[1]
+                feature_index=owners[item.feature_indices[0]] if item.feature_indices else None,
+                related_feature_index=owners[item.feature_indices[1]]
                 if len(item.feature_indices) > 1
                 else None,
                 metadata={"metric": item.metric},

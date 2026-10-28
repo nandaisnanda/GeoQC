@@ -239,6 +239,13 @@ def quality_profiles(draw: st.DrawFn, dataset_name: str) -> QualityProfile:
     tolerance=2.0,
     minimum_area=0.0,
 ).via("regression")
+# The road preset raised on any non-line feature in a mixed layer.
+@example(
+    geometries=[Point(0, 0), from_wkt("LINESTRING (0 0, 1 0)")],
+    crs=None,
+    tolerance=0.0,
+    minimum_area=0.0,
+).via("regression")
 # The UTM suggestion unioned invalid polygons, which GEOS overlay rejects.
 @example(
     geometries=[from_wkt(BOWTIE), from_wkt("POLYGON ((0 0, 2 2, 0 2, 2 0, 0 0))")],
