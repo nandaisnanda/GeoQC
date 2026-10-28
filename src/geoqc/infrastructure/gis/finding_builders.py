@@ -303,8 +303,12 @@ def _cross_layer_issues(
             hits = [item for item in candidates if geometry.intersects(reference[item])]
             if not hits:
                 continue
-            issue_geometry = shapely.union_all(
-                [geometry.intersection(reference[item]) for item in hits]
+            # Overlay needs valid input. Invalid features still violate the rule, so
+            # report them at the source geometry instead of the intersection.
+            issue_geometry = (
+                shapely.union_all([geometry.intersection(reference[item]) for item in hits])
+                if geometry.is_valid and all(reference[item].is_valid for item in hits)
+                else geometry
             )
             title = "Forbidden layer intersection"
             recommendation = f"Review the conflict with {rule.reference_layer}."

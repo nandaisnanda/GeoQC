@@ -78,13 +78,15 @@ def _attribute_overlap_issues(
         not reference_attributes or any(column not in item for item in reference_attributes)
     ):
         raise ValueError(f"attribute {column!r} is missing from layer {rule.reference_layer}")
-    finite_target = [_has_finite_coordinates(item) for item in target]
+    # Overlap areas come from an overlay, which raises on invalid input. The geometry
+    # check reports invalid features (including NaN coordinates), so skip them here.
+    valid_target = [item.is_valid for item in target]
     for left, geometry in enumerate(source):
-        if tree is None or not _has_finite_coordinates(geometry):
+        if tree is None or not geometry.is_valid:
             continue
         for raw in tree.query(geometry):
             right = int(raw)
-            if (reference is None and right <= left) or not finite_target[right]:
+            if (reference is None and right <= left) or not valid_target[right]:
                 continue
             overlap = geometry.intersection(target[right])
             if overlap.is_empty or overlap.area <= rule.tolerance:

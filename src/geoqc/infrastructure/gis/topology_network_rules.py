@@ -11,7 +11,7 @@ from geoqc.domain.models.quality_workflow import (
     TopologyRule,
     TopologyRuleType,
 )
-from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
+from geoqc.infrastructure.gis.spatial_helpers import _safe_buffer
 from geoqc.infrastructure.gis.topology_rule_helpers import _issue, _line_records, _points, _unique
 
 AttributeValue = str | int | float | bool | None
@@ -20,12 +20,14 @@ AttributeValue = str | int | float | bool | None
 def _boundary_mismatch(
     source: Sequence[BaseGeometry], reference: Sequence[BaseGeometry], rule: TopologyRule
 ) -> list[DatasetIssue]:
+    # Boundary overlay raises on invalid input. The geometry check reports invalid
+    # features (including NaN coordinates), so they are left out here.
     target = shapely.union_all(
-        [item.boundary for item in reference if not item.is_empty and _has_finite_coordinates(item)]
+        [item.boundary for item in reference if not item.is_empty and item.is_valid]
     )
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(source):
-        if not _has_finite_coordinates(geometry):
+        if not geometry.is_valid:
             continue
         boundary = geometry.boundary
         buffered = _safe_buffer(target, rule.tolerance) if rule.tolerance else None
@@ -83,7 +85,8 @@ def _endpoint_issues(source: Sequence[BaseGeometry], rule: TopologyRule) -> list
 
 
 def _overshoot_undershoot(source: Sequence[BaseGeometry], rule: TopologyRule) -> list[DatasetIssue]:
-    records = _line_records(source)
+    # Endpoint intersections are overlays, which raise on invalid linework.
+    records = [(owner, line) for owner, line in _line_records(source) if line.is_valid]
     findings: list[DatasetIssue] = []
     tolerance = rule.tolerance
     if tolerance <= 0:

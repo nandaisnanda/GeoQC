@@ -77,6 +77,7 @@ CRS_CHOICES = (None, "EPSG:4326", "EPSG:3857", "EPSG:32748")
 # Minimal inputs from crashes found by this suite. Each crashed at least one check.
 NAN_POLYGON = "POLYGON ((0 0, 0 1, 0 NaN, 0 0))"
 ALL_NAN_LINE = "LINESTRING (NaN NaN, NaN NaN)"
+BOWTIE = "POLYGON ((0 0, 2 2, 2 0, 0 2, 0 0))"
 OVERFLOW_POLYGON = "POLYGON ((0 0, 0 0, 0 1.7976931348623157e308, 0 1.7976931348623157e308, 0 0))"
 
 thresholds = st.one_of(
@@ -238,6 +239,13 @@ def quality_profiles(draw: st.DrawFn, dataset_name: str) -> QualityProfile:
     tolerance=2.0,
     minimum_area=0.0,
 ).via("regression")
+# The UTM suggestion unioned invalid polygons, which GEOS overlay rejects.
+@example(
+    geometries=[from_wkt(BOWTIE), from_wkt("POLYGON ((0 0, 2 2, 0 2, 2 0, 0 0))")],
+    crs="EPSG:4326",
+    tolerance=0.0,
+    minimum_area=0.0,
+).via("regression")
 # The UTM suggestion took the centroid of a NaN union and read X from an empty point.
 @example(
     geometries=[from_wkt("LINESTRING (0 0, NaN 1)")],
@@ -287,6 +295,19 @@ def test_geometry_audit_never_crashes(
     settings=RuleSettings(tolerance=2.0),
     source=layer("source", OVERFLOW_POLYGON, "POINT (0 0)"),
     reference=layer("reference", OVERFLOW_POLYGON, "POINT (0 0)"),
+).via("regression")
+# Overlays in must_not_intersect, attribute_overlap, and boundary_must_match
+# raised on a self-intersecting polygon.
+@example(
+    settings=RuleSettings(),
+    source=layer("source", BOWTIE, "POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))"),
+    reference=layer("reference", "POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))", BOWTIE),
+).via("regression")
+# Overshoot/undershoot intersected a collapsed line.
+@example(
+    settings=RuleSettings(tolerance=1.0, use_reference=False),
+    source=layer("source", "LINESTRING (0 0, 0 0)", "LINESTRING (0 0, 1 0)"),
+    reference=layer("reference"),
 ).via("regression")
 # Overshoot/undershoot intersected all-NaN multilines.
 @example(
