@@ -12,6 +12,8 @@ All notable changes to GeoQC are documented here. This project follows
   certifi 2026.10.19, opentelemetry-api 1.45.1 (`api` extra), and in the web
   client undici 7.30.1, vite 8.3.3, and vitest 5.0.3. TypeScript in the web
   client is capped below 7.
+- cryptography moved to 50.0.0 for PYSEC-2026-3552 (CVE-2026-69247). Only the
+  Linux dev toolchain pulls it in, through twine, keyring, and secretstorage.
 
 ### Changed
 
