@@ -72,10 +72,12 @@ def _attribute_overlap_issues(
     tree = STRtree(target) if target else None
     findings: list[DatasetIssue] = []
     column = rule.attribute_column or ""
-    if not source_attributes or any(column not in item for item in source_attributes):
+    # An empty layer has no attribute records and nothing that can overlap.
+    if (source and not source_attributes) or any(column not in item for item in source_attributes):
         raise ValueError(f"attribute {column!r} is missing from layer {rule.layer}")
     if reference is not None and (
-        not reference_attributes or any(column not in item for item in reference_attributes)
+        (reference and not reference_attributes)
+        or any(column not in item for item in reference_attributes)
     ):
         raise ValueError(f"attribute {column!r} is missing from layer {rule.reference_layer}")
     # Overlap areas come from an overlay, which raises on invalid input. The geometry

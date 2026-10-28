@@ -27,9 +27,10 @@ def _boundary_mismatch(
     )
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(source):
-        if not geometry.is_valid:
-            continue
         boundary = geometry.boundary
+        # Shapely defines no boundary for a GeometryCollection.
+        if not geometry.is_valid or boundary is None:
+            continue
         buffered = _safe_buffer(target, rule.tolerance) if rule.tolerance else None
         matched = target if buffered is None else buffered
         mismatch = boundary.difference(matched)
@@ -112,7 +113,12 @@ def _overshoot_undershoot(source: Sequence[BaseGeometry], rule: TopologyRule) ->
                     nearest = (other_owner, distance)
                 intersection = line.intersection(other)
                 for point in _points(intersection):
-                    tail = abs(line.project(point) - measure)
+                    try:
+                        position = line.project(point)
+                    except shapely.errors.GEOSException:
+                        # GEOS cannot locate points on a line whose length underflows.
+                        continue
+                    tail = abs(position - measure)
                     if 1e-12 < tail <= tolerance and endpoint.distance(other) > 1e-12:
                         findings.append(
                             _issue(

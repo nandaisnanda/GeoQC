@@ -309,6 +309,30 @@ def test_geometry_audit_never_crashes(
     source=layer("source", "LINESTRING (0 0, 0 0)", "LINESTRING (0 0, 1 0)"),
     reference=layer("reference"),
 ).via("regression")
+# Empty parts reached code that indexes the first coordinate (dangles, endpoints,
+# overshoot, spikes, vertex distance); a GeometryCollection has no boundary; and
+# attribute_overlap rejected an empty layer as missing its attribute.
+@example(
+    settings=RuleSettings(tolerance=1.0),
+    source=layer("source", "LINESTRING EMPTY", "POLYGON EMPTY", "LINESTRING (0 0, 1 0)"),
+    reference=layer("reference", "POINT (0 0)"),
+).via("regression")
+@example(
+    settings=RuleSettings(),
+    source=layer("source", "GEOMETRYCOLLECTION (POINT (0 0))"),
+    reference=layer("reference", "POINT (0 0)"),
+).via("regression")
+@example(
+    settings=RuleSettings(use_reference=False),
+    source=layer("source"),
+    reference=layer("reference"),
+).via("regression")
+# Overshoot/undershoot projected onto a line whose length underflows.
+@example(
+    settings=RuleSettings(tolerance=1e-12, use_reference=False),
+    source=layer("source", "LINESTRING (0 0, 5e-324 0)", "LINESTRING (0 0, 0 0, 0 0, 0 1)"),
+    reference=layer("reference"),
+).via("regression")
 # Overshoot/undershoot intersected all-NaN multilines.
 @example(
     settings=RuleSettings(tolerance=1e-12, use_reference=False),
