@@ -92,15 +92,28 @@ python -m pip install .
 
 ### Audit a dataset in Python
 
-Run the public dataset audit with automatic in-memory/streaming selection:
+The repository ships a 120 KB sample, `examples/sample_defects.gpkg`, with
+known defects: a self-intersecting parcel, a 0.05 m sliver, two overlapping
+parcels, and a road that stops 0.5 m short of the network. From a source
+checkout:
 
 ```python
 import geoqc
 
-report = geoqc.audit_dataset("data.gpkg", layer=None, schema=None, checks="all")
+report = geoqc.audit_dataset(
+    "examples/sample_defects.gpkg",
+    layer="parcels",
+    profile="docs/examples/parcel-profile.yaml",
+)
 print(report.status, report.issue_count)
-print(report.to_dict())
+for issue in report.issues:
+    print(issue.code, issue.feature_index, issue.message)
 ```
+
+Expected output includes `GEO-SELF_INTERSECTION`, `TOP-MINIMUM-AREA` for the
+sliver, and `TOP-NO-OVERLAP`. Use `layer="roads"` with
+`docs/examples/road-network-profile.yaml` to see the two `ROAD-DEAD_END`
+findings. `examples/make_sample_data.py` regenerates the file.
 
 The report always includes dataset metadata and explicit `passed`, `failed`,
 `error`, or `skipped` outcomes. Attribute checks require an `AttributeSchema`;
