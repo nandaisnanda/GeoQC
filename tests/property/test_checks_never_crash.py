@@ -397,6 +397,17 @@ def test_geometry_validator_never_crashes(geometry: BaseGeometry) -> None:
 
 
 @given(cells=st.lists(dirty_wkb_cells, max_size=8), offset=st.integers(0, 10_000))
+# The strict WKB reader raised on an unclosed ring and on a one-point line.
+@example(
+    cells=[
+        bytes.fromhex(
+            "0103000000010000000300000000000000000000000000000000000000"
+            "000000000000f03f0000000000000000000000000000f03f000000000000f03f"
+        ),
+        bytes.fromhex("01020000000100000000000000000000000000000000000000"),
+    ],
+    offset=0,
+).via("regression")
 def test_streaming_geometry_check_never_crashes(cells: list[bytes | None], offset: int) -> None:
     batch = pa.record_batch({"geometry": pa.array(cells, type=pa.binary())})
     metadata = DatasetMetadata("Parquet", None, "EPSG:3857", len(cells), "geometry")
