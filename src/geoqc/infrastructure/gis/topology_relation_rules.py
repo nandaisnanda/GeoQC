@@ -1,7 +1,7 @@
 """Cross-feature, attribute, relation, and precision topology rules."""
 
 from collections.abc import Mapping, Sequence
-from math import hypot
+from math import hypot, isfinite
 
 import shapely
 from shapely.geometry import MultiPoint, Point
@@ -127,10 +127,17 @@ def _precision_grid_issues(
     findings: list[DatasetIssue] = []
     size = rule.precision_grid_size
     for index, geometry in enumerate(source):
+        # NaN coordinates cannot be snapped; the geometry check reports them as invalid.
+        if not _has_finite_coordinates(geometry):
+            continue
         offenders: list[tuple[float, float]] = []
         maximum = 0.0
         for coordinate in shapely.get_coordinates(geometry):
             x, y = float(coordinate[0]), float(coordinate[1])
+            # Near the float limit, dividing by a small grid size overflows to infinity
+            # and there is no grid cell to snap to.
+            if not (isfinite(x / size) and isfinite(y / size)):
+                continue
             snapped = (round(x / size) * size, round(y / size) * size)
             deviation = hypot(x - snapped[0], y - snapped[1])
             if deviation > rule.tolerance + 1e-12:

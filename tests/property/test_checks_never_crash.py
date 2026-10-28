@@ -333,6 +333,12 @@ def test_geometry_audit_never_crashes(
     source=layer("source", "LINESTRING (0 0, 5e-324 0)", "LINESTRING (0 0, 0 0, 0 0, 0 1)"),
     reference=layer("reference"),
 ).via("regression")
+# precision_grid rounded NaN coordinates and overflowed dividing near-limit ones.
+@example(
+    settings=RuleSettings(precision_grid_size=0.5),
+    source=layer("source", "POINT (NaN 0)", "POINT (1.7976931348623157e308 0)"),
+    reference=layer("reference"),
+).via("regression")
 # Overshoot/undershoot intersected all-NaN multilines.
 @example(
     settings=RuleSettings(tolerance=1e-12, use_reference=False),
