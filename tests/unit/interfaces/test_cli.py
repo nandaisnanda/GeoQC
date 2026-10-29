@@ -112,7 +112,7 @@ def test_dataset_issue_survives_pickling() -> None:
     assert restored == issue
     assert restored.metadata["reason"] == "ring"
     with pytest.raises(TypeError):
-        restored.metadata["reason"] = "x"  # type: ignore[index]
+        restored.metadata["reason"] = "x"
 
 
 def test_audit_folder_skips_unsupported_files(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:

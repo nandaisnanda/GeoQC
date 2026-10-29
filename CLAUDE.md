@@ -15,6 +15,10 @@ that open in QGIS. Focus: Indonesian datasets.
 
 ## Hard rules
 - Never git commit, push, or create branches.
+- Every git action that touches a remote or shared history (push, pull, fetch
+  + merge, merge, rebase, force push, opening or merging a PR) needs my explicit
+  permission in the current message, for any remote or branch. Approval for one
+  action does not carry over to the next.
 - Only edit files needed for the current task. If you need more than 3 source
   files, stop and ask first.
 - No new modules, dependencies, public API, or refactors unless the task says so.
