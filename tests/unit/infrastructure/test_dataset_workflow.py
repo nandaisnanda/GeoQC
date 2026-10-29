@@ -9,7 +9,7 @@ import geopandas as gpd  # type: ignore[import-untyped]
 import pyogrio  # type: ignore[import-untyped]
 import pytest
 from shapely import box
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point
 
 import geoqc
 from geoqc.domain.rules import Severity
@@ -272,11 +272,13 @@ def test_missing_crs_and_missing_configured_id_are_rejected() -> None:
     missing_crs = geoqc.audit_geodataframe(frame, profile=geoqc.QualityProfile("required"))
     assert any(issue.issue_type == "missing_crs" for issue in missing_crs.issues)
 
-    with pytest.raises(ValueError, match="id_column.*missing"):
-        geoqc.audit_geodataframe(
-            frame,
-            profile=geoqc.QualityProfile("ids", id_column="missing", require_crs=False),
-        )
+    missing_id = geoqc.audit_geodataframe(
+        frame,
+        profile=geoqc.QualityProfile("ids", id_column="missing", require_crs=False),
+    )
+    missing = [issue for issue in missing_id.issues if issue.metadata.get("column") == "missing"]
+    assert len(missing) == 1
+    assert missing[0].severity is Severity.CRITICAL
 
 
 def test_audit_file_validates_formats_layers_and_reads_parquet(tmp_path: Path) -> None:
@@ -358,8 +360,11 @@ def test_clean_audit_still_writes_valid_empty_issue_geopackage(tmp_path: Path) -
 
 
 def test_repair_plan_marks_competing_reviewed_actions() -> None:
-    bowtie = Polygon([(0, 0), (2, 2), (0, 2), (2, 0), (0, 0)])
-    result = geoqc.audit_geometries([bowtie])
+    parcels = [box(0, 0, 2, 2), box(1, 0, 3, 2), box(0, 1, 2, 3)]
+    frame = gpd.GeoDataFrame(geometry=parcels, crs="EPSG:32748")
+    result = geoqc.audit_geodataframe(
+        frame, profile=geoqc.QualityProfile("parcels", preset=geoqc.QualityPreset.PARCEL)
+    )
 
     plan = geoqc.build_repair_plan(result)
 
