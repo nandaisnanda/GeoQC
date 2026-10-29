@@ -19,7 +19,11 @@ from geoqc.domain.models.spatial_intelligence import RoadIssueType, RoadNetworkC
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.shapely_geometry_validator import ShapelyGeometryValidator
 from geoqc.infrastructure.gis.shapely_spatial_intelligence import ShapelyRoadNetworkAnalyzer
-from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
+from geoqc.infrastructure.gis.spatial_helpers import (
+    _has_finite_coordinates,
+    _is_valid,
+    _safe_buffer,
+)
 
 _ROAD_GEOMETRY_TYPES = frozenset({"LineString", "MultiLineString"})
 _SPECIFIC_INVALID_TYPES = frozenset(
@@ -110,11 +114,11 @@ def _overlap_issues(
     for left, geometry in enumerate(items):
         # Invalid geometries are reported by the geometry checks; GEOS overlay
         # operations can raise on them, so they are excluded here.
-        if geometry.is_empty or not geometry.is_valid:
+        if geometry.is_empty or not _is_valid(geometry):
             continue
         for raw in tree.query(geometry):
             right = int(raw)
-            if right <= left or not items[right].is_valid:
+            if right <= left or not _is_valid(items[right]):
                 continue
             overlap = geometry.intersection(items[right])
             if overlap.is_empty or overlap.area <= tolerance:
@@ -152,7 +156,7 @@ def _gap_issues(
     polygonal = [
         item
         for item in items
-        if item.geom_type in {"Polygon", "MultiPolygon"} and not item.is_empty and item.is_valid
+        if item.geom_type in {"Polygon", "MultiPolygon"} and not item.is_empty and _is_valid(item)
     ]
     if not polygonal:
         return []
@@ -201,11 +205,15 @@ def _duplicate_issues(
             right = int(raw)
             if right <= left or not finite[right]:
                 continue
-            duplicate = (
-                geometry.equals_exact(items[right], tolerance)
-                if tolerance
-                else geometry.equals(items[right])
-            )
+            if tolerance:
+                duplicate = geometry.equals_exact(items[right], tolerance)
+            else:
+                try:
+                    duplicate = geometry.equals(items[right])
+                except shapely.errors.GEOSException:
+                    # Topological equality raises on degenerate rings; compare
+                    # coordinates instead.
+                    duplicate = geometry.equals_exact(items[right], 0.0)
             if duplicate:
                 findings.append(
                     _issue(
@@ -251,7 +259,7 @@ def _minimum_area_issues(
         )
         for index, geometry in enumerate(items)
         # Invalid geometries are reported by the geometry checks; their area is unreliable.
-        if not geometry.is_empty and geometry.is_valid and geometry.area < minimum
+        if not geometry.is_empty and _is_valid(geometry) and geometry.area < minimum
     ]
 
 
@@ -273,15 +281,17 @@ def _road_issues(items: Sequence[BaseGeometry], layer: str, tolerance: float) ->
         for index, geometry in enumerate(items)
         if geometry.geom_type not in _ROAD_GEOMETRY_TYPES
     ]
-    # NaN coordinates are reported as invalid geometry and would break the analyzer.
+    config = RoadNetworkConfig(connection_tolerance=tolerance or 0.01)
+    # NaN coordinates are reported as invalid geometry, and coordinates near the
+    # float limit overflow inside buffer. Both would break the analyzer.
     owners = [
         index
         for index, geometry in enumerate(items)
-        if geometry.geom_type in _ROAD_GEOMETRY_TYPES and _has_finite_coordinates(geometry)
+        if geometry.geom_type in _ROAD_GEOMETRY_TYPES
+        and _safe_buffer(geometry, config.connection_tolerance) is not None
     ]
     if not owners:
         return findings
-    config = RoadNetworkConfig(connection_tolerance=tolerance or 0.01)
     report = ShapelyRoadNetworkAnalyzer().analyze(
         tuple(_wkt(items[index]) for index in owners), config
     )
@@ -350,7 +360,7 @@ def _cross_layer_issues(
             # report them at the source geometry instead of the intersection.
             issue_geometry = (
                 shapely.union_all([geometry.intersection(reference[item]) for item in hits])
-                if geometry.is_valid and all(reference[item].is_valid for item in hits)
+                if _is_valid(geometry) and all(_is_valid(reference[item]) for item in hits)
                 else geometry
             )
             title = "Forbidden layer intersection"

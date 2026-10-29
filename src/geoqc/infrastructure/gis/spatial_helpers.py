@@ -25,6 +25,19 @@ def _has_finite_coordinates(geometry: BaseGeometry) -> bool:
     return bool(np.isfinite(shapely.get_coordinates(geometry)).all())
 
 
+def _is_valid(geometry: BaseGeometry) -> bool:
+    """Return False when the geometry is invalid or GEOS cannot validate it.
+
+    Mixing subnormal and near-limit coordinates makes ``is_valid`` itself raise.
+    The geometry check reports such features as invalid, so cross-feature checks
+    skip them like any other invalid feature.
+    """
+    try:
+        return bool(geometry.is_valid)
+    except shapely.errors.GEOSException:
+        return False
+
+
 def _safe_buffer(geometry: BaseGeometry, distance: float) -> BaseGeometry | None:
     """Buffer a finite geometry, or return None when GEOS cannot.
 

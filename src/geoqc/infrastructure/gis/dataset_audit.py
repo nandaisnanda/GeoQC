@@ -23,6 +23,8 @@ from geoqc.infrastructure.gis.dataset_checks import (
     _crs_issues,
     _geometry_type_issues,
     _metric_skip_reason,
+    _missing_rule_column,
+    _missing_rule_column_issues,
 )
 from geoqc.infrastructure.gis.dataset_export import _ResultExporter
 from geoqc.infrastructure.gis.dataset_scoring import _rebuild_result
@@ -77,13 +79,16 @@ def audit_geodataframe(
             if rule.layer == dataset_name and rule.reference_layer is None
         )
         if local_rules and _metric_skip_reason(frame, profile) is None:
+            issues.extend(_missing_rule_column_issues(frame, dataset_name, local_rules, issues))
+            runnable = tuple(rule for rule in local_rules if not _missing_rule_column(frame, rule))
             layer = DatasetLayer(
                 dataset_name,
                 tuple(_wkt(item) for item in frame.geometry),
                 crs,
                 _feature_attributes(frame),
             )
-            issues.extend(evaluate_topology_rules((layer,), local_rules))
+            if runnable:
+                issues.extend(evaluate_topology_rules((layer,), runnable))
         issues = _attach_feature_ids(issues, frame, profile.id_column)
         issues = [
             replace(

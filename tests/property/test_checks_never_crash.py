@@ -79,6 +79,12 @@ NAN_POLYGON = "POLYGON ((0 0, 0 1, 0 NaN, 0 0))"
 ALL_NAN_LINE = "LINESTRING (NaN NaN, NaN NaN)"
 BOWTIE = "POLYGON ((0 0, 2 2, 2 0, 0 2, 0 0))"
 OVERFLOW_POLYGON = "POLYGON ((0 0, 0 0, 0 1.7976931348623157e308, 0 1.7976931348623157e308, 0 0))"
+COLLAPSED_RING = "((0 2, 0 2, 0 0, 0 0, 0 2))"
+# GEOS raises from is_valid itself when subnormal and near-limit coordinates mix.
+UNVALIDATABLE_POLYGON = (
+    "MULTIPOLYGON (((0 1, 5e-324 1, 5e-324 0, 0 0, 0 1)),"
+    " ((-1 -1, 1.7976931348623157e308 -1, 1.7976931348623157e308 3, -1 3, -1 -1)))"
+)
 
 thresholds = st.one_of(
     st.sampled_from((0.0, 1e-12, 0.5, 1.0, 1e9)),
@@ -260,6 +266,32 @@ def quality_profiles(draw: st.DrawFn, dataset_name: str) -> QualityProfile:
     tolerance=0.0,
     minimum_area=0.0,
 ).via("regression")
+# GEOS equals() raised on a collection of collapsed rings in the duplicate check.
+@example(
+    geometries=[
+        from_wkt(f"MULTIPOLYGON ({COLLAPSED_RING})"),
+        from_wkt(
+            f"GEOMETRYCOLLECTION (MULTIPOLYGON ({COLLAPSED_RING}), MULTIPOLYGON ({COLLAPSED_RING}))"
+        ),
+    ],
+    crs=None,
+    tolerance=0.0,
+    minimum_area=0.0,
+).via("regression")
+# buffer() in the road analyzer overflowed on a line spanning the float range.
+@example(
+    geometries=[from_wkt("LINESTRING (0 -1e300, 0 1.7976931348623157e308)")],
+    crs=None,
+    tolerance=0.0,
+    minimum_area=0.0,
+).via("regression")
+# is_valid raised instead of returning False for a polygon GEOS cannot validate.
+@example(
+    geometries=[from_wkt(UNVALIDATABLE_POLYGON), Point(0, 0)],
+    crs="EPSG:4326",
+    tolerance=0.0,
+    minimum_area=1.0,
+).via("regression")
 def test_geometry_audit_never_crashes(
     preset: QualityPreset | None,
     geometries: Sequence[BaseGeometry],
@@ -351,6 +383,18 @@ def test_geometry_audit_never_crashes(
     settings=RuleSettings(tolerance=1e-12, use_reference=False),
     source=layer("source", "MULTILINESTRING ((NaN NaN, NaN NaN), (NaN NaN, NaN NaN))"),
     reference=layer("reference"),
+).via("regression")
+# boundary_must_match differenced a point's empty boundary, which GEOS overlay rejects.
+@example(
+    settings=RuleSettings(),
+    source=layer("source", "POINT (0 0)"),
+    reference=layer("reference", "POLYGON ((1 1, 0 1, 0 0, 1 0, 1 1))"),
+).via("regression")
+# Validity guards raised on a polygon GEOS cannot validate.
+@example(
+    settings=RuleSettings(),
+    source=layer("source", UNVALIDATABLE_POLYGON, "POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))"),
+    reference=layer("reference", UNVALIDATABLE_POLYGON),
 ).via("regression")
 def test_topology_rule_never_crashes(
     rule_type: TopologyRuleType,

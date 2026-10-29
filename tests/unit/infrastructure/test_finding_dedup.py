@@ -35,3 +35,17 @@ def test_self_intersecting_polygon_reports_only_the_specific_issue() -> None:
     result = geoqc.audit_geodataframe(frame, profile=profile)
 
     assert [issue.code for issue in result.issues] == ["GEO-SELF_INTERSECTION"]
+
+
+def test_missing_attribute_overlap_column_becomes_critical_finding() -> None:
+    frame = gpd.GeoDataFrame(geometry=[Point(0, 0)], crs="EPSG:32748")
+    rule = geoqc.TopologyRule(
+        geoqc.TopologyRuleType.ATTRIBUTE_OVERLAP, layer="parcels", attribute_column="zone"
+    )
+    profile = geoqc.QualityProfile("zones", topology_rules=(rule,))
+
+    result = geoqc.audit_geodataframe(frame, dataset_name="parcels", profile=profile)
+
+    missing = [issue for issue in result.issues if issue.metadata.get("column") == "zone"]
+    assert len(missing) == 1
+    assert missing[0].severity is Severity.CRITICAL
