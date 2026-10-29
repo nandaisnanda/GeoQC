@@ -7,6 +7,7 @@ from typing import Annotated
 from uuid import uuid4
 
 import typer
+from pyogrio import list_layers  # type: ignore[import-untyped]
 from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
 
 from geoqc import (
@@ -26,6 +27,7 @@ from geoqc.application.benchmarking import BenchmarkReport
 from geoqc.application.parallel import ParallelBatchExecutor
 from geoqc.application.parallel.scheduler import TaskScheduler
 from geoqc.application.services import BatchProcessor
+from geoqc.domain.models import DatasetAuditResult
 from geoqc.domain.models.spatial_intelligence import RoadNetworkRepairConfig
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.parallel_audit import (
@@ -48,6 +50,63 @@ app: typer.Typer = typer.Typer(
 
 
 app.add_typer(delivery_app)
+
+AUDIT_SUFFIXES = (".fgb", ".geojson", ".gpkg", ".parquet", ".shp")
+_SHAPEFILE_SIDECARS = frozenset(
+    {".cpg", ".dbf", ".prj", ".qix", ".qmd", ".sbn", ".sbx", ".shx", ".xml"}
+)
+
+
+def _skipped_files(inputs: list[Path], sources: tuple[Path, ...], recursive: bool) -> list[str]:
+    """List folder files that discovery ignored, without shapefile sidecars."""
+    kept = set(sources)
+    shapefiles = {
+        (item.parent, item.stem.casefold()) for item in sources if item.suffix.casefold() == ".shp"
+    }
+    skipped: list[str] = []
+    for folder in inputs:
+        if not folder.is_dir():
+            continue
+        candidates = folder.rglob("*") if recursive else folder.glob("*")
+        for candidate in candidates:
+            if not candidate.is_file() or candidate.resolve() in kept:
+                continue
+            resolved = candidate.resolve()
+            if (
+                candidate.suffix.casefold() in _SHAPEFILE_SIDECARS
+                and (resolved.parent, resolved.stem.casefold()) in shapefiles
+            ):
+                continue
+            skipped.append(candidate.relative_to(folder).as_posix())
+    return sorted(skipped, key=str.casefold)
+
+
+def _echo_skipped(skipped: list[str]) -> None:
+    if skipped:
+        typer.echo(f"Skipped {len(skipped)} unsupported file(s): {', '.join(skipped)}")
+
+
+def _echo_audit_item(label: str | Path, engine: str, audit_result: DatasetAuditResult) -> bool:
+    """Print one audit result and return whether it passed the quality gate."""
+    invalid_count = len([issue for issue in audit_result.issues if issue.category == "geometry"])
+    report_suffix = f" status={audit_result.status.value} issues={audit_result.issue_count}"
+    quality_passed = (
+        audit_result.status not in {CheckStatus.FAILED, CheckStatus.ERROR} and audit_result.passes()
+    )
+    typer.echo(
+        f"PROCESSED {label}: engine={engine} "
+        f"features={audit_result.feature_count} "
+        f"invalid={invalid_count}{report_suffix}"
+    )
+    typer.echo(f"QUALITY {'PASS' if quality_passed else 'FAIL'} {label}")
+    return quality_passed
+
+
+def _gpkg_layers(source: Path) -> list[str]:
+    """Return GeoPackage layer names, or an empty list for other inputs."""
+    if source.suffix.casefold() != ".gpkg" or not source.is_file():
+        return []
+    return [str(item[0]) for item in list_layers(source)]
 
 
 @app.callback()
@@ -121,12 +180,15 @@ def audit(
     ] = False,
 ) -> None:
     """Audit independent datasets with automatic safe multiprocessing."""
-    discovery = BatchProcessor[DatasetAudit](audit_dataset_worker)
+    discovery = BatchProcessor[DatasetAudit](
+        audit_dataset_worker, supported_suffixes=AUDIT_SUFFIXES
+    )
     try:
         sources = discovery.discover(inputs, recursive=recursive)
     except (FileNotFoundError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
+    skipped = _skipped_files(inputs, sources, recursive)
 
     outputs_requested = any(item is not None for item in (report, json_output, findings))
     if (outputs_requested or layer is not None) and len(sources) != 1:
@@ -165,44 +227,60 @@ def audit(
             f"issues={len(quality_result.issues)} score={quality_result.quality_score:.2f}"
         )
         typer.echo(f"QUALITY {'PASS' if passed else 'FAIL'}")
+        _echo_skipped(skipped)
         if not passed:
             raise typer.Exit(code=1)
         return
 
+    # The worker reads one layer per path, so multi-layer GeoPackages are
+    # audited layer by layer here instead of in the process pool.
+    layered: dict[Path, list[str]] = {}
+    for source in sources:
+        try:
+            layer_names = _gpkg_layers(source)
+        except DataSourceError:
+            continue
+        if len(layer_names) > 1:
+            layered[source] = layer_names
+    pool_sources = tuple(source for source in sources if source not in layered)
+
     scheduler = TaskScheduler()
-    worker_count = scheduler.worker_count(len(sources), requested_workers=workers)
+    worker_count = scheduler.worker_count(len(pool_sources), requested_workers=workers)
     worker = DatasetAuditWorker(
         benchmark_enabled=benchmark,
         chunk_size=chunk_size,
         worker_count=worker_count,
     )
     result = ParallelBatchExecutor(scheduler).run(
-        sources,
+        pool_sources,
         worker,
         requested_workers=workers,
         progress=ParallelConsoleProgress(),
     )
+    quality_failed = False
     for item in result.items:
         if item.value is None:
             typer.echo(f"FAILED {item.source}: {item.error}")
             continue
-        audit_result = item.value.result
-        invalid_count = len(
-            [issue for issue in audit_result.issues if issue.category == "geometry"]
-        )
-        report_suffix = f" status={audit_result.status.value} issues={audit_result.issue_count}"
-        quality_passed = (
-            audit_result.status not in {CheckStatus.FAILED, CheckStatus.ERROR}
-            and audit_result.passes()
-        )
-        typer.echo(
-            f"PROCESSED {item.source}: engine={item.value.decision.engine} "
-            f"features={audit_result.feature_count} "
-            f"invalid={invalid_count}{report_suffix}"
-        )
-        typer.echo(f"QUALITY {'PASS' if quality_passed else 'FAIL'} {item.source}")
+        passed = _echo_audit_item(item.source, item.value.decision.engine, item.value.result)
+        quality_failed = quality_failed or not passed
+    layer_total = layer_failed = 0
+    for source, layer_names in layered.items():
+        for name in layer_names:
+            layer_total += 1
+            label = f"{source} layer={name}"
+            try:
+                layer_result = run_dataset_audit(source, layer=name)
+            except (DataSourceError, OSError, TypeError, ValueError) as error:
+                typer.echo(f"FAILED {label}: {type(error).__name__}: {error}")
+                layer_failed += 1
+                continue
+            passed = _echo_audit_item(label, layer_result.metadata.engine, layer_result)
+            quality_failed = quality_failed or not passed
     typer.echo(
-        f"Audit complete: total={result.total} succeeded={result.succeeded} failed={result.failed}"
+        f"Audit complete: total={result.total + layer_total} "
+        f"succeeded={result.succeeded + layer_total - layer_failed} "
+        f"failed={result.failed + layer_failed}"
     )
     if benchmark:
         benchmark_report = BenchmarkReport(
@@ -218,15 +296,8 @@ def audit(
             typer.echo(f"Error writing benchmark report: {error}", err=True)
             raise typer.Exit(code=2) from error
         typer.echo(f"Benchmark report: {benchmark_output}")
-    quality_failed = any(
-        item.value is not None
-        and (
-            item.value.result.status in {CheckStatus.FAILED, CheckStatus.ERROR}
-            or not item.value.result.passes()
-        )
-        for item in result.items
-    )
-    if not result.is_successful or quality_failed:
+    _echo_skipped(skipped)
+    if not result.is_successful or layer_failed or quality_failed:
         raise typer.Exit(code=1)
 
 
@@ -282,6 +353,45 @@ def check_dataset(
                 require_crs=False,
             )
         )
+        layers = _gpkg_layers(source) if layer is None else []
+    except (DataSourceError, FileNotFoundError, OSError, TypeError, ValueError) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    policy = QualityGatePolicy(
+        minimum_score=(minimum_score if minimum_score is not None else profile.gate.minimum_score),
+        fail_on=fail_on or profile.gate.fail_on,
+        allow_unknown_crs=profile.gate.allow_unknown_crs,
+    )
+    if len(layers) > 1:
+        if issues is not None or report is not None:
+            typer.echo(
+                "Error: --issues and --report need --layer for a multi-layer GeoPackage.",
+                err=True,
+            )
+            raise typer.Exit(code=2)
+        worst = 0
+        for name in layers:
+            try:
+                layer_result = run_dataset_audit(source, layer=name, profile=profile)
+            except (DataSourceError, OSError, TypeError, ValueError) as error:
+                typer.echo(f"QC error: dataset={source.name} layer={name} error={error}")
+                worst = 2
+                continue
+            layer_passed = layer_result.passes(policy)
+            typer.echo(
+                f"QC complete: dataset={source.name} layer={name} "
+                f"features={layer_result.feature_count} issues={len(layer_result.issues)} "
+                f"score={layer_result.quality_score:.2f} "
+                f"status={'PASS' if layer_passed else 'FAIL'}"
+            )
+            if not layer_passed:
+                worst = max(worst, 1)
+        if worst:
+            raise typer.Exit(code=worst)
+        return
+
+    try:
         result = run_dataset_audit(source, layer=layer, profile=profile)
         if issues is not None:
             write_issue_layers(result, issues, overwrite=overwrite)
@@ -291,11 +401,6 @@ def check_dataset(
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
 
-    policy = QualityGatePolicy(
-        minimum_score=(minimum_score if minimum_score is not None else profile.gate.minimum_score),
-        fail_on=fail_on or profile.gate.fail_on,
-        allow_unknown_crs=profile.gate.allow_unknown_crs,
-    )
     typer.echo(
         f"QC complete: dataset={result.dataset_name} features={result.feature_count} "
         f"issues={len(result.issues)} score={result.quality_score:.2f} "

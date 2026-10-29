@@ -64,3 +64,55 @@ quality_gate:
 
     assert result.exit_code == 0
     assert "status=PASS" in result.stdout
+
+
+def _write_two_layer_gpkg(source: Path) -> None:
+    gpd.GeoDataFrame(geometry=[Point(1, 2)], crs="EPSG:4326").to_file(source, layer="clean")
+    gpd.GeoDataFrame(geometry=[Point(1, 2), Point(1, 2)], crs="EPSG:4326").to_file(
+        source, layer="duplicates"
+    )
+
+
+def test_check_command_reports_every_layer_with_worst_exit_code(tmp_path: Path) -> None:
+    source = tmp_path / "multi.gpkg"
+    _write_two_layer_gpkg(source)
+
+    with pytest.warns(DeprecationWarning, match="geoqc check is deprecated"):
+        result = CliRunner().invoke(
+            app, ["check", str(source), "--preset", "point_survey", "--fail-on", "warning"]
+        )
+
+    assert result.exit_code == 1
+    assert "layer=clean" in result.stdout
+    assert "layer=duplicates" in result.stdout
+    assert result.stdout.count("QC complete:") == 2
+    assert "status=PASS" in result.stdout
+    assert "status=FAIL" in result.stdout
+
+
+def test_check_command_keeps_single_layer_option(tmp_path: Path) -> None:
+    source = tmp_path / "multi.gpkg"
+    _write_two_layer_gpkg(source)
+
+    with pytest.warns(DeprecationWarning, match="geoqc check is deprecated"):
+        result = CliRunner().invoke(
+            app,
+            ["check", str(source), "--preset", "point_survey", "--layer", "clean"],
+        )
+
+    assert result.exit_code == 0
+    assert result.stdout.count("QC complete:") == 1
+    assert "layer=" not in result.stdout
+
+
+def test_check_command_requires_layer_for_multi_layer_outputs(tmp_path: Path) -> None:
+    source = tmp_path / "multi.gpkg"
+    _write_two_layer_gpkg(source)
+
+    with pytest.warns(DeprecationWarning, match="geoqc check is deprecated"):
+        result = CliRunner().invoke(
+            app, ["check", str(source), "--report", str(tmp_path / "report.json")]
+        )
+
+    assert result.exit_code == 2
+    assert "need --layer" in result.stderr

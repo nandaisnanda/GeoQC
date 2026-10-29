@@ -1,7 +1,7 @@
 """Framework-neutral topology, finding, and repair-plan values."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from hashlib import sha256
 from types import MappingProxyType
@@ -195,6 +195,18 @@ class DatasetIssue:
                 raise ValueError(f"{name} must not be empty")
         if not self.geometry_wkt.strip():
             raise ValueError("geometry_wkt must not be empty")
+        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
+
+    def __getstate__(self) -> list[object]:
+        # mappingproxy cannot be pickled, so worker processes send a plain dict.
+        return [
+            dict(self.metadata) if item.name == "metadata" else getattr(self, item.name)
+            for item in fields(self)
+        ]
+
+    def __setstate__(self, state: list[object]) -> None:
+        for item, value in zip(fields(self), state, strict=True):
+            object.__setattr__(self, item.name, value)
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
     @property

@@ -1,8 +1,11 @@
 """Tests for the Typer composition root."""
 
 import json
+import pickle
 from pathlib import Path
 
+import geopandas as gpd  # type: ignore[import-untyped]
+import pytest
 from pytest import MonkeyPatch
 from shapely.geometry import Point
 from typer.testing import CliRunner
@@ -14,6 +17,8 @@ from geoqc.domain.models import (
     BatchItemStatus,
     BatchResult,
 )
+from geoqc.domain.models.topology import DatasetIssue, IssueGeometryKind, RepairRisk
+from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.parallel_audit import DatasetAudit
 from geoqc.infrastructure.gis.quality_workflow import audit_geometries
 from geoqc.infrastructure.gis.road_dataset_repair import (
@@ -59,6 +64,75 @@ def test_audit_folder_reports_dataset_results(monkeypatch: MonkeyPatch, tmp_path
     assert "engine=streaming features=2 invalid=0" in result.stdout
     assert "status=passed issues=0" in result.stdout
     assert "total=1 succeeded=1 failed=0" in result.stdout
+
+
+def test_audit_folder_reports_each_geopackage_layer(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    source = tmp_path / "multi.gpkg"
+    for name in ("first", "second"):
+        gpd.GeoDataFrame(geometry=[Point(0, 0)], crs="EPSG:4326").to_file(source, layer=name)
+    pooled: list[Path] = []
+
+    def fake_run(
+        _self: object, sources: tuple[Path, ...], *_args: object, **_kwargs: object
+    ) -> BatchResult[DatasetAudit]:
+        pooled.extend(sources)
+        return BatchResult(())
+
+    monkeypatch.setattr(ParallelBatchExecutor, "run", fake_run)
+
+    result = runner.invoke(app, ["audit", str(tmp_path)])
+
+    assert pooled == []
+    assert "FAILED" not in result.stdout
+    assert f"QUALITY PASS {source.resolve()} layer=first" in result.stdout
+    assert f"QUALITY PASS {source.resolve()} layer=second" in result.stdout
+    assert "total=2 succeeded=2 failed=0" in result.stdout
+    assert result.exit_code == 0
+
+
+def test_dataset_issue_survives_pickling() -> None:
+    issue = DatasetIssue(
+        code="GEOM_001",
+        issue_type="invalid_geometry",
+        title="Invalid geometry",
+        message="Self-intersection",
+        severity=Severity.ERROR,
+        category="geometry",
+        recommendation="Run make_valid",
+        repair_risk=next(iter(RepairRisk)),
+        geometry_kind=next(iter(IssueGeometryKind)),
+        geometry_wkt="POINT (0 0)",
+        metadata={"reason": "ring"},
+    )
+
+    restored = pickle.loads(pickle.dumps(issue))
+
+    assert restored == issue
+    assert restored.metadata["reason"] == "ring"
+    with pytest.raises(TypeError):
+        restored.metadata["reason"] = "x"  # type: ignore[index]
+
+
+def test_audit_folder_skips_unsupported_files(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    for name in ("roads.gpkg", "rivers.shp", "rivers.dbf", "report.json", "notes.txt"):
+        (tmp_path / name).touch()
+    seen: list[str] = []
+
+    def fake_run(
+        _self: object, sources: tuple[Path, ...], *_args: object, **_kwargs: object
+    ) -> BatchResult[DatasetAudit]:
+        seen.extend(item.name for item in sources)
+        return BatchResult(())
+
+    monkeypatch.setattr(ParallelBatchExecutor, "run", fake_run)
+
+    result = runner.invoke(app, ["audit", str(tmp_path)])
+
+    assert sorted(seen) == ["rivers.shp", "roads.gpkg"]
+    assert "FAILED" not in result.stdout
+    assert result.stdout.strip().endswith("Skipped 2 unsupported file(s): notes.txt, report.json")
 
 
 def test_cli_shows_help() -> None:
