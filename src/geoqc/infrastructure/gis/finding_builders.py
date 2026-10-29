@@ -22,6 +22,13 @@ from geoqc.infrastructure.gis.shapely_spatial_intelligence import ShapelyRoadNet
 from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
 
 _ROAD_GEOMETRY_TYPES = frozenset({"LineString", "MultiLineString"})
+_SPECIFIC_INVALID_TYPES = frozenset(
+    {
+        GeometryIssueType.EMPTY_GEOMETRY,
+        GeometryIssueType.SELF_INTERSECTION,
+        GeometryIssueType.RING_ERROR,
+    }
+)
 
 _GEOMETRY_DETAILS: Mapping[GeometryIssueType, tuple[str, str, Severity, RepairRisk]] = {
     GeometryIssueType.INVALID_GEOMETRY: (
@@ -61,7 +68,16 @@ def _geometry_issues(items: Sequence[BaseGeometry], layer: str) -> list[DatasetI
     validator = ShapelyGeometryValidator()
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(items):
-        for issue in validator.validate(geometry).issues:
+        detected = validator.validate(geometry).issues
+        # One finding per root cause: the generic invalid finding is redundant
+        # when a specific defect already explains the invalidity.
+        if any(issue.issue_type in _SPECIFIC_INVALID_TYPES for issue in detected):
+            detected = tuple(
+                issue
+                for issue in detected
+                if issue.issue_type is not GeometryIssueType.INVALID_GEOMETRY
+            )
+        for issue in detected:
             title, recommendation, severity, risk = _GEOMETRY_DETAILS[issue.issue_type]
             findings.append(
                 _issue(
@@ -234,7 +250,8 @@ def _minimum_area_issues(
             metadata={"area": float(geometry.area), "minimum_area": minimum},
         )
         for index, geometry in enumerate(items)
-        if not geometry.is_empty and geometry.area < minimum
+        # Invalid geometries are reported by the geometry checks; their area is unreliable.
+        if not geometry.is_empty and geometry.is_valid and geometry.area < minimum
     ]
 
 
