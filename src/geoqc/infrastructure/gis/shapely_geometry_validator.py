@@ -3,6 +3,7 @@
 from collections.abc import Iterable, Iterator, Sequence
 from itertools import islice
 
+import shapely
 from shapely import is_valid_reason
 from shapely.geometry import (
     GeometryCollection,
@@ -21,6 +22,7 @@ from geoqc.domain.models import (
     GeometryValidationIssue,
     GeometryValidationResult,
 )
+from geoqc.infrastructure.gis.spatial_helpers import _is_valid
 
 Coordinate = tuple[float, ...]
 
@@ -35,6 +37,13 @@ _RING_ERROR_REASONS = (
 
 _SELF_INTERSECTION_REASON = "self-intersection"
 _MAX_DUPLICATE_LOCATIONS = 20
+
+
+def _invalid_reason(geometry: BaseGeometry) -> str:
+    try:
+        return str(is_valid_reason(geometry))
+    except shapely.errors.GEOSException as error:
+        return f"GEOS cannot validate it ({error})"
 
 
 class ShapelyGeometryValidator:
@@ -54,8 +63,7 @@ class ShapelyGeometryValidator:
                 )
             )
 
-        is_valid = geometry.is_valid
-        reason = is_valid_reason(geometry) if not is_valid else None
+        reason = _invalid_reason(geometry) if not _is_valid(geometry) else None
         if reason is not None:
             issues.append(
                 GeometryValidationIssue(
@@ -144,10 +152,10 @@ class ShapelyGeometryValidator:
         while pending:
             current = pending.pop()
             if isinstance(current, LineString):
-                if current.is_valid:
+                if _is_valid(current):
                     lines.append(current)
             elif isinstance(current, MultiLineString):
-                lines.extend(line for line in current.geoms if line.is_valid)
+                lines.extend(line for line in current.geoms if _is_valid(line))
             elif isinstance(current, GeometryCollection):
                 pending.extend(current.geoms)
 
@@ -166,8 +174,8 @@ class ShapelyGeometryValidator:
         pending = [geometry]
         while pending:
             current = pending.pop()
-            if isinstance(current, (Polygon, MultiPolygon)) and not current.is_valid:
-                reason = is_valid_reason(current)
+            if isinstance(current, (Polygon, MultiPolygon)) and not _is_valid(current):
+                reason = _invalid_reason(current)
                 normalized_reason = reason.casefold()
                 if ring_reason is None and any(
                     marker in normalized_reason for marker in _RING_ERROR_REASONS

@@ -18,6 +18,8 @@ from geoqc.domain.models import (
     DatasetIssue,
     QualityProfile,
     RepairRisk,
+    TopologyRule,
+    TopologyRuleType,
 )
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.dataset_values import _kind, _wkt
@@ -260,6 +262,41 @@ def _missing_id_column_issues(
         layer = next((issue.layer for issue in issues if issue.layer), None) or "dataset"
         result.append(_attribute_issue(rule, layer, None, Point(), message))
     return result
+
+
+def _missing_rule_column(frame: gpd.GeoDataFrame, rule: TopologyRule) -> bool:
+    return (
+        rule.rule_type is TopologyRuleType.ATTRIBUTE_OVERLAP
+        and rule.attribute_column not in frame.columns
+    )
+
+
+def _missing_rule_column_issues(
+    frame: gpd.GeoDataFrame,
+    layer: str,
+    rules: Sequence[TopologyRule],
+    issues: Sequence[DatasetIssue],
+) -> list[DatasetIssue]:
+    # A rule whose column is absent cannot run. Report the column once as a critical
+    # finding, unless a profile "required" finding already covers it.
+    reported = {issue.metadata.get("column") for issue in issues if issue.issue_type == "required"}
+    columns = sorted(
+        {
+            str(rule.attribute_column)
+            for rule in rules
+            if _missing_rule_column(frame, rule) and rule.attribute_column not in reported
+        }
+    )
+    return [
+        _attribute_issue(
+            AttributeRule(column, AttributeRuleType.REQUIRED, severity=Severity.CRITICAL),
+            layer,
+            None,
+            Point(),
+            f"Column {column!r} used by a topology rule is missing; the rule was skipped.",
+        )
+        for column in columns
+    ]
 
 
 def _attribute_issue(

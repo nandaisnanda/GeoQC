@@ -101,6 +101,17 @@ All notable changes to GeoQC are documented here. This project follows
   Before, one stray point aborted the audit with `ValueError`.
 - Streaming audits report WKB that fails to parse (unclosed rings, one-point
   lines) as `invalid_geometry` and keep processing the chunk.
+- A configured `id_column` that is missing from the data is reported once as a
+  critical `ATTR-REQUIRED` finding, and row indexes are used as feature ids.
+  Before, the audit raised `ValueError`.
+- A self-intersecting polygon is reported only as `GEO-SELF_INTERSECTION`, not
+  also as generic invalid geometry or a below-minimum area.
+- An `attribute_overlap` rule whose column is missing from the data is skipped
+  and reported as a critical `ATTR-REQUIRED` finding instead of raising
+  `ValueError` in `audit_geodataframe`.
+- The duplicate check no longer raises a GEOS error on collections of collapsed
+  rings, the road analyzer skips lines whose buffer overflows near the float
+  limit, and `boundary_must_match` skips points, which have no boundary.
 
 ## [0.1.0] - 2026-07-26
 

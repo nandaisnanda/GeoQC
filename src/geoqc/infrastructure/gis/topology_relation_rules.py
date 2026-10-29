@@ -14,7 +14,11 @@ from geoqc.domain.models.quality_workflow import (
     TopologyRule,
     TopologyRuleType,
 )
-from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
+from geoqc.infrastructure.gis.spatial_helpers import (
+    _has_finite_coordinates,
+    _is_valid,
+    _safe_buffer,
+)
 from geoqc.infrastructure.gis.topology_rule_helpers import _issue, _metadata_value
 
 AttributeValue = str | int | float | bool | None
@@ -82,9 +86,9 @@ def _attribute_overlap_issues(
         raise ValueError(f"attribute {column!r} is missing from layer {rule.reference_layer}")
     # Overlap areas come from an overlay, which raises on invalid input. The geometry
     # check reports invalid features (including NaN coordinates), so skip them here.
-    valid_target = [item.is_valid for item in target]
+    valid_target = [_is_valid(item) for item in target]
     for left, geometry in enumerate(source):
-        if tree is None or not geometry.is_valid:
+        if tree is None or not _is_valid(geometry):
             continue
         for raw in tree.query(geometry):
             right = int(raw)

@@ -8,6 +8,7 @@ from pyproj.exceptions import CRSError
 from shapely.geometry.base import BaseGeometry
 
 from geoqc.domain.models import CrsGuardResult, CrsUnitStatus
+from geoqc.infrastructure.gis.spatial_helpers import _is_valid
 
 
 def assess_crs(crs: str | None, geometries: Sequence[BaseGeometry] = ()) -> CrsGuardResult:
@@ -54,7 +55,7 @@ def assess_crs(crs: str | None, geometries: Sequence[BaseGeometry] = ()) -> CrsG
 
 def _suggest_utm(geometries: Sequence[BaseGeometry]) -> str | None:
     # union_all is an overlay and raises on invalid input; NaN coordinates are invalid too.
-    usable = [item for item in geometries if not item.is_empty and item.is_valid]
+    usable = [item for item in geometries if not item.is_empty and _is_valid(item)]
     if not usable:
         return None
     center = shapely.union_all(usable).centroid
