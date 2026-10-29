@@ -1,7 +1,7 @@
 """Cross-feature, attribute, relation, and precision topology rules."""
 
 from collections.abc import Mapping, Sequence
-from math import hypot
+from math import hypot, isfinite
 
 import shapely
 from shapely.geometry import MultiPoint, Point
@@ -14,6 +14,7 @@ from geoqc.domain.models.quality_workflow import (
     TopologyRule,
     TopologyRuleType,
 )
+from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
 from geoqc.infrastructure.gis.topology_rule_helpers import _issue, _metadata_value
 
 AttributeValue = str | int | float | bool | None
@@ -23,17 +24,25 @@ def _relation_issues(
     source: Sequence[BaseGeometry], reference: Sequence[BaseGeometry], rule: TopologyRule
 ) -> list[DatasetIssue]:
     tree = STRtree(reference) if reference else None
+    finite_reference = [_has_finite_coordinates(item) for item in reference]
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(source):
-        candidates = [] if tree is None else [int(item) for item in tree.query(geometry)]
+        if not _has_finite_coordinates(geometry):
+            continue
+        candidates = (
+            []
+            if tree is None
+            else [int(item) for item in tree.query(geometry) if finite_reference[int(item)]]
+        )
         if rule.rule_type is TopologyRuleType.MUST_TOUCH:
             valid = any(geometry.touches(reference[item]) for item in candidates)
         elif rule.rule_type is TopologyRuleType.MUST_INTERSECT:
             valid = any(geometry.intersects(reference[item]) for item in candidates)
         else:
-            valid = any(
-                geometry.buffer(rule.tolerance).covers(reference[item]) for item in candidates
-            )
+            buffered = _safe_buffer(geometry, rule.tolerance)
+            if buffered is None:
+                continue
+            valid = any(buffered.covers(reference[item]) for item in candidates)
         if not valid:
             findings.append(
                 _issue(
@@ -63,18 +72,23 @@ def _attribute_overlap_issues(
     tree = STRtree(target) if target else None
     findings: list[DatasetIssue] = []
     column = rule.attribute_column or ""
-    if not source_attributes or any(column not in item for item in source_attributes):
+    # An empty layer has no attribute records and nothing that can overlap.
+    if (source and not source_attributes) or any(column not in item for item in source_attributes):
         raise ValueError(f"attribute {column!r} is missing from layer {rule.layer}")
     if reference is not None and (
-        not reference_attributes or any(column not in item for item in reference_attributes)
+        (reference and not reference_attributes)
+        or any(column not in item for item in reference_attributes)
     ):
         raise ValueError(f"attribute {column!r} is missing from layer {rule.reference_layer}")
+    # Overlap areas come from an overlay, which raises on invalid input. The geometry
+    # check reports invalid features (including NaN coordinates), so skip them here.
+    valid_target = [item.is_valid for item in target]
     for left, geometry in enumerate(source):
-        if tree is None:
+        if tree is None or not geometry.is_valid:
             continue
         for raw in tree.query(geometry):
             right = int(raw)
-            if reference is None and right <= left:
+            if (reference is None and right <= left) or not valid_target[right]:
                 continue
             overlap = geometry.intersection(target[right])
             if overlap.is_empty or overlap.area <= rule.tolerance:
@@ -113,10 +127,17 @@ def _precision_grid_issues(
     findings: list[DatasetIssue] = []
     size = rule.precision_grid_size
     for index, geometry in enumerate(source):
+        # NaN coordinates cannot be snapped; the geometry check reports them as invalid.
+        if not _has_finite_coordinates(geometry):
+            continue
         offenders: list[tuple[float, float]] = []
         maximum = 0.0
         for coordinate in shapely.get_coordinates(geometry):
             x, y = float(coordinate[0]), float(coordinate[1])
+            # Near the float limit, dividing by a small grid size overflows to infinity
+            # and there is no grid cell to snap to.
+            if not (isfinite(x / size) and isfinite(y / size)):
+                continue
             snapped = (round(x / size) * size, round(y / size) * size)
             deviation = hypot(x - snapped[0], y - snapped[1])
             if deviation > rule.tolerance + 1e-12:

@@ -9,7 +9,7 @@ from shapely.geometry.base import BaseGeometry
 
 from geoqc.application.streaming.geometry import GeometryChunkResult, GeometryFinding
 from geoqc.application.streaming.models import DatasetMetadata, FeatureChunk
-from geoqc.domain.models.geometry_validation import GeometryValidationResult
+from geoqc.domain.models.geometry_validation import GeometryIssueType, GeometryValidationResult
 
 
 class GeometryValidator(Protocol):
@@ -40,8 +40,20 @@ class GeometryChunkProcessor:
         counts: Counter[str] = Counter()
         findings: list[GeometryFinding] = []
         for local_index, wkb in enumerate(values):
-            geometry = shapely.from_wkb(wkb) if wkb is not None else None
-            issues = self._issues(geometry)
+            try:
+                geometry = shapely.from_wkb(wkb) if wkb is not None else None
+            except shapely.errors.GEOSException as error:
+                # Unclosed rings and one-point lines are rejected by the WKB reader.
+                # Report them rather than repairing the source data silently.
+                reason = str(error).splitlines()[0] if str(error) else type(error).__name__
+                issues = [
+                    (
+                        GeometryIssueType.INVALID_GEOMETRY.value,
+                        f"WKB could not be parsed: {reason}.",
+                    )
+                ]
+            else:
+                issues = self._issues(geometry)
             if issues:
                 counts.update(issue_type for issue_type, _message in issues)
                 findings.append(GeometryFinding(chunk.offset + local_index, tuple(issues)))

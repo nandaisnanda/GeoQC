@@ -13,6 +13,7 @@ from geoqc.domain.models.quality_workflow import (
     RepairRisk,
     TopologyRule,
 )
+from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates
 
 AttributeValue = str | int | float | bool | None
 
@@ -20,6 +21,8 @@ AttributeValue = str | int | float | bool | None
 def _line_records(source: Sequence[BaseGeometry]) -> list[tuple[int, LineString]]:
     records: list[tuple[int, LineString]] = []
     for owner, geometry in enumerate(source):
+        if geometry.is_empty or not _has_finite_coordinates(geometry):
+            continue
         if isinstance(geometry, LineString):
             records.append((owner, geometry))
         elif geometry.geom_type in {"MultiLineString", "GeometryCollection"}:
@@ -38,6 +41,8 @@ def _coordinate_sequences(
     pending = list(enumerate(source))
     while pending:
         owner, geometry = pending.pop(0)
+        if geometry.is_empty:
+            continue
         if isinstance(geometry, LineString):
             coordinates = [(float(x), float(y)) for x, y, *_ in geometry.coords]
             output.append((owner, coordinates, geometry.is_closed))

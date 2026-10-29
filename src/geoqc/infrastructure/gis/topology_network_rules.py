@@ -11,6 +11,7 @@ from geoqc.domain.models.quality_workflow import (
     TopologyRule,
     TopologyRuleType,
 )
+from geoqc.infrastructure.gis.spatial_helpers import _safe_buffer
 from geoqc.infrastructure.gis.topology_rule_helpers import _issue, _line_records, _points, _unique
 
 AttributeValue = str | int | float | bool | None
@@ -19,11 +20,19 @@ AttributeValue = str | int | float | bool | None
 def _boundary_mismatch(
     source: Sequence[BaseGeometry], reference: Sequence[BaseGeometry], rule: TopologyRule
 ) -> list[DatasetIssue]:
-    target = shapely.union_all([item.boundary for item in reference if not item.is_empty])
+    # Boundary overlay raises on invalid input. The geometry check reports invalid
+    # features (including NaN coordinates), so they are left out here.
+    target = shapely.union_all(
+        [item.boundary for item in reference if not item.is_empty and item.is_valid]
+    )
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(source):
         boundary = geometry.boundary
-        matched = target.buffer(rule.tolerance) if rule.tolerance else target
+        # Shapely defines no boundary for a GeometryCollection.
+        if not geometry.is_valid or boundary is None:
+            continue
+        buffered = _safe_buffer(target, rule.tolerance) if rule.tolerance else None
+        matched = target if buffered is None else buffered
         mismatch = boundary.difference(matched)
         if mismatch.is_empty:
             continue
@@ -77,7 +86,8 @@ def _endpoint_issues(source: Sequence[BaseGeometry], rule: TopologyRule) -> list
 
 
 def _overshoot_undershoot(source: Sequence[BaseGeometry], rule: TopologyRule) -> list[DatasetIssue]:
-    records = _line_records(source)
+    # Endpoint intersections are overlays, which raise on invalid linework.
+    records = [(owner, line) for owner, line in _line_records(source) if line.is_valid]
     findings: list[DatasetIssue] = []
     tolerance = rule.tolerance
     if tolerance <= 0:
@@ -103,7 +113,12 @@ def _overshoot_undershoot(source: Sequence[BaseGeometry], rule: TopologyRule) ->
                     nearest = (other_owner, distance)
                 intersection = line.intersection(other)
                 for point in _points(intersection):
-                    tail = abs(line.project(point) - measure)
+                    try:
+                        position = line.project(point)
+                    except shapely.errors.GEOSException:
+                        # GEOS cannot locate points on a line whose length underflows.
+                        continue
+                    tail = abs(position - measure)
                     if 1e-12 < tail <= tolerance and endpoint.distance(other) > 1e-12:
                         findings.append(
                             _issue(

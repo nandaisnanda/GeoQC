@@ -53,11 +53,12 @@ def assess_crs(crs: str | None, geometries: Sequence[BaseGeometry] = ()) -> CrsG
 
 
 def _suggest_utm(geometries: Sequence[BaseGeometry]) -> str | None:
-    non_empty = [item for item in geometries if not item.is_empty]
-    if not non_empty:
+    # union_all is an overlay and raises on invalid input; NaN coordinates are invalid too.
+    usable = [item for item in geometries if not item.is_empty and item.is_valid]
+    if not usable:
         return None
-    center = shapely.union_all(non_empty).centroid
-    if not (-180 <= center.x <= 180 and -90 <= center.y <= 90):
+    center = shapely.union_all(usable).centroid
+    if center.is_empty or not (-180 <= center.x <= 180 and -90 <= center.y <= 90):
         return None
     zone = min(60, max(1, int((center.x + 180) // 6) + 1))
     return f"EPSG:{32600 + zone if center.y >= 0 else 32700 + zone}"

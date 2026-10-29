@@ -69,6 +69,10 @@ All notable changes to GeoQC are documented here. This project follows
 - Safe `geoqc repair-roads` file workflow with attribute preservation, atomic
   GeoPackage output, CRS/layer/size validation, overwrite protection, and an
   optional JSON report.
+- Hypothesis property tests in `tests/property` run every registered check on
+  dirty geometry: self-intersections, unclosed rings, empty and NaN geometry,
+  duplicate vertices, extreme coordinates, and mixed-type layers. Set
+  `HYPOTHESIS_PROFILE=ci` for the smaller derandomized CI profile.
 
 ### Fixed
 
@@ -81,6 +85,22 @@ All notable changes to GeoQC are documented here. This project follows
 - Overlap and gap checks no longer crash with a GEOS `TopologyException` when a
   layer contains an invalid polygon. Invalid features are skipped there and
   still reported by the geometry checks.
+
+- Duplicate, `must_be_inside`, and `must_cover` checks no longer segfault the
+  Python process on a line with only NaN coordinates. Cross-feature checks now
+  skip NaN coordinates and buffers that overflow near the float limit, and the
+  geometry check reports those features as invalid.
+- `must_not_intersect`, `boundary_must_match`, `attribute_overlap`,
+  `no_overshoot_undershoot`, and the UTM CRS suggestion no longer raise GEOS
+  `TopologyException` on invalid geometry. `must_not_intersect` still reports
+  the violation, located at the source feature.
+- Topology rules accept empty lines and rings, `GeometryCollection` features,
+  empty layers, and lines whose length underflows. `precision_grid` skips
+  coordinates it cannot snap.
+- The road preset reports each non-line feature as `GEO-UNEXPECTED-TYPE`.
+  Before, one stray point aborted the audit with `ValueError`.
+- Streaming audits report WKB that fails to parse (unclosed rings, one-point
+  lines) as `invalid_geometry` and keep processing the chunk.
 
 ## [0.1.0] - 2026-07-26
 

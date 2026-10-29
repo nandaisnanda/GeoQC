@@ -19,6 +19,16 @@ from geoqc.domain.models.spatial_intelligence import RoadIssueType, RoadNetworkC
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.shapely_geometry_validator import ShapelyGeometryValidator
 from geoqc.infrastructure.gis.shapely_spatial_intelligence import ShapelyRoadNetworkAnalyzer
+from geoqc.infrastructure.gis.spatial_helpers import _has_finite_coordinates, _safe_buffer
+
+_ROAD_GEOMETRY_TYPES = frozenset({"LineString", "MultiLineString"})
+_SPECIFIC_INVALID_TYPES = frozenset(
+    {
+        GeometryIssueType.EMPTY_GEOMETRY,
+        GeometryIssueType.SELF_INTERSECTION,
+        GeometryIssueType.RING_ERROR,
+    }
+)
 
 _GEOMETRY_DETAILS: Mapping[GeometryIssueType, tuple[str, str, Severity, RepairRisk]] = {
     GeometryIssueType.INVALID_GEOMETRY: (
@@ -58,7 +68,16 @@ def _geometry_issues(items: Sequence[BaseGeometry], layer: str) -> list[DatasetI
     validator = ShapelyGeometryValidator()
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(items):
-        for issue in validator.validate(geometry).issues:
+        detected = validator.validate(geometry).issues
+        # One finding per root cause: the generic invalid finding is redundant
+        # when a specific defect already explains the invalidity.
+        if any(issue.issue_type in _SPECIFIC_INVALID_TYPES for issue in detected):
+            detected = tuple(
+                issue
+                for issue in detected
+                if issue.issue_type is not GeometryIssueType.INVALID_GEOMETRY
+            )
+        for issue in detected:
             title, recommendation, severity, risk = _GEOMETRY_DETAILS[issue.issue_type]
             findings.append(
                 _issue(
@@ -173,11 +192,14 @@ def _duplicate_issues(
     tree = STRtree(items) if items else None
     if tree is None:
         return findings
+    finite = [_has_finite_coordinates(item) for item in items]
     for left, geometry in enumerate(items):
-        query = geometry.buffer(tolerance) if tolerance else geometry
+        query = _safe_buffer(geometry, tolerance) if tolerance else geometry
+        if not finite[left] or query is None:
+            continue
         for raw in tree.query(query):
             right = int(raw)
-            if right <= left:
+            if right <= left or not finite[right]:
                 continue
             duplicate = (
                 geometry.equals_exact(items[right], tolerance)
@@ -228,16 +250,41 @@ def _minimum_area_issues(
             metadata={"area": float(geometry.area), "minimum_area": minimum},
         )
         for index, geometry in enumerate(items)
-        if not geometry.is_empty and geometry.area < minimum
+        # Invalid geometries are reported by the geometry checks; their area is unreliable.
+        if not geometry.is_empty and geometry.is_valid and geometry.area < minimum
     ]
 
 
 def _road_issues(items: Sequence[BaseGeometry], layer: str, tolerance: float) -> list[DatasetIssue]:
-    if not items:
-        return []
+    findings = [
+        _issue(
+            code="GEO-UNEXPECTED-TYPE",
+            issue_type="unexpected_geometry_type",
+            title="Unexpected Geometry Type",
+            message=f"{geometry.geom_type} is not allowed by the road preset.",
+            severity=Severity.ERROR,
+            category="geometry",
+            recommendation="Convert the feature to one of: LineString, MultiLineString.",
+            risk=RepairRisk.REVIEW,
+            geometry=geometry,
+            layer=layer,
+            feature_index=index,
+        )
+        for index, geometry in enumerate(items)
+        if geometry.geom_type not in _ROAD_GEOMETRY_TYPES
+    ]
+    # NaN coordinates are reported as invalid geometry and would break the analyzer.
+    owners = [
+        index
+        for index, geometry in enumerate(items)
+        if geometry.geom_type in _ROAD_GEOMETRY_TYPES and _has_finite_coordinates(geometry)
+    ]
+    if not owners:
+        return findings
     config = RoadNetworkConfig(connection_tolerance=tolerance or 0.01)
-    report = ShapelyRoadNetworkAnalyzer().analyze(tuple(_wkt(item) for item in items), config)
-    findings = []
+    report = ShapelyRoadNetworkAnalyzer().analyze(
+        tuple(_wkt(items[index]) for index in owners), config
+    )
     for item in report.findings:
         risk = (
             RepairRisk.SAFE
@@ -256,8 +303,8 @@ def _road_issues(items: Sequence[BaseGeometry], layer: str, tolerance: float) ->
                 risk=risk,
                 geometry=shapely.from_wkt(item.location_wkt),
                 layer=layer,
-                feature_index=item.feature_indices[0] if item.feature_indices else None,
-                related_feature_index=item.feature_indices[1]
+                feature_index=owners[item.feature_indices[0]] if item.feature_indices else None,
+                related_feature_index=owners[item.feature_indices[1]]
                 if len(item.feature_indices) > 1
                 else None,
                 metadata={"metric": item.metric},
@@ -270,16 +317,25 @@ def _cross_layer_issues(
     source: Sequence[BaseGeometry], reference: Sequence[BaseGeometry], rule: TopologyRule
 ) -> list[DatasetIssue]:
     reference_tree = STRtree(reference) if reference else None
+    finite_reference = [_has_finite_coordinates(item) for item in reference]
     findings: list[DatasetIssue] = []
     for index, geometry in enumerate(source):
+        if not _has_finite_coordinates(geometry):
+            continue
         candidates = (
             []
             if reference_tree is None
-            else [int(value) for value in reference_tree.query(geometry)]
+            else [
+                int(value)
+                for value in reference_tree.query(geometry)
+                if finite_reference[int(value)]
+            ]
         )
         if rule.rule_type is TopologyRuleType.MUST_BE_INSIDE:
             valid = any(
-                reference[item].buffer(rule.tolerance).covers(geometry) for item in candidates
+                buffered.covers(geometry)
+                for item in candidates
+                if (buffered := _safe_buffer(reference[item], rule.tolerance)) is not None
             )
             if valid:
                 continue
@@ -290,8 +346,12 @@ def _cross_layer_issues(
             hits = [item for item in candidates if geometry.intersects(reference[item])]
             if not hits:
                 continue
-            issue_geometry = shapely.union_all(
-                [geometry.intersection(reference[item]) for item in hits]
+            # Overlay needs valid input. Invalid features still violate the rule, so
+            # report them at the source geometry instead of the intersection.
+            issue_geometry = (
+                shapely.union_all([geometry.intersection(reference[item]) for item in hits])
+                if geometry.is_valid and all(reference[item].is_valid for item in hits)
+                else geometry
             )
             title = "Forbidden layer intersection"
             recommendation = f"Review the conflict with {rule.reference_layer}."

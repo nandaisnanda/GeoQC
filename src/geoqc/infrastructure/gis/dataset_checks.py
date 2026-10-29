@@ -214,7 +214,7 @@ def _attach_feature_ids(
     if id_column is None:
         return list(issues)
     if id_column not in frame.columns:
-        raise ValueError(f"configured id_column {id_column!r} is missing")
+        return _missing_id_column_issues(issues, frame, id_column)
 
     def identifier(position: int | None) -> str | int | None:
         if position is None:
@@ -234,6 +234,32 @@ def _attach_feature_ids(
         )
         for issue in issues
     ]
+
+
+def _missing_id_column_issues(
+    issues: Sequence[DatasetIssue], frame: gpd.GeoDataFrame, id_column: str
+) -> list[DatasetIssue]:
+    # Fall back to the row index so findings stay traceable, and report the
+    # missing column once: reuse a profile "required" finding when one exists.
+    message = f"Configured id_column {id_column!r} is missing; row index is used as feature id."
+    result: list[DatasetIssue] = []
+    reported = False
+    for issue in issues:
+        if issue.issue_type == "required" and issue.metadata.get("column") == id_column:
+            issue = replace(issue, severity=Severity.CRITICAL, message=message)
+            reported = True
+        result.append(
+            replace(
+                issue,
+                feature_id=issue.feature_index,
+                related_feature_id=issue.related_feature_index,
+            )
+        )
+    if not reported:
+        rule = AttributeRule(id_column, AttributeRuleType.REQUIRED, severity=Severity.CRITICAL)
+        layer = next((issue.layer for issue in issues if issue.layer), None) or "dataset"
+        result.append(_attribute_issue(rule, layer, None, Point(), message))
+    return result
 
 
 def _attribute_issue(
