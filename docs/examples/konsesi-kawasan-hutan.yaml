@@ -1,0 +1,25 @@
+# Cross-layer example: concession polygons (layer "konsesi") must not overlap
+# kawasan hutan (layer "kawasan_hutan"). Run with audit_layers() on both layers.
+# must_not_intersect also flags a concession that only shares an edge with
+# kawasan hutan, so touching boundaries are reported for review too.
+# Geometry and topology only: attribute schemas differ between agencies.
+name: konsesi-kawasan-hutan
+version: 1
+enabled_checks: [geometry, crs, topology]
+expected_geometry_types: [Polygon, MultiPolygon]
+crs:
+  required: true
+  require_projected: true
+  allowed: []
+attribute_schema: []
+topology_rules:
+  - type: must_not_intersect
+    layer: konsesi
+    reference_layer: kawasan_hutan
+  - type: no_overlap
+    layer: konsesi
+    tolerance: 0.1
+quality_gate:
+  minimum_score: 80
+  fail_on: error
+  allow_unknown_crs: false

@@ -38,15 +38,20 @@ def _relation_issues(
             if tree is None
             else [int(item) for item in tree.query(geometry) if finite_reference[int(item)]]
         )
-        if rule.rule_type is TopologyRuleType.MUST_TOUCH:
-            valid = any(geometry.touches(reference[item]) for item in candidates)
-        elif rule.rule_type is TopologyRuleType.MUST_INTERSECT:
-            valid = any(geometry.intersects(reference[item]) for item in candidates)
-        else:
-            buffered = _safe_buffer(geometry, rule.tolerance)
-            if buffered is None:
-                continue
-            valid = any(buffered.covers(reference[item]) for item in candidates)
+        try:
+            if rule.rule_type is TopologyRuleType.MUST_TOUCH:
+                valid = any(geometry.touches(reference[item]) for item in candidates)
+            elif rule.rule_type is TopologyRuleType.MUST_INTERSECT:
+                valid = any(geometry.intersects(reference[item]) for item in candidates)
+            else:
+                buffered = _safe_buffer(geometry, rule.tolerance)
+                if buffered is None:
+                    continue
+                valid = any(buffered.covers(reference[item]) for item in candidates)
+        except shapely.errors.GEOSException:
+            # Degenerate geometries (e.g. zero-width rings) make GEOS predicates
+            # raise; the relation cannot be confirmed, so report it for review.
+            valid = False
         if not valid:
             findings.append(
                 _issue(

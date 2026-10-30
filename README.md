@@ -162,6 +162,42 @@ if result.has_issue(GeometryIssueType.SELF_INTERSECTION):
 Results are immutable, typed dataclasses. Passing an object that is not a
 Shapely geometry raises `TypeError` so contract errors are detected early.
 
+## Indonesian presets
+
+Ready-made profiles in [docs/examples/](docs/examples/) check geometry and
+topology only. They require no attribute columns, because each agency uses its
+own schema.
+
+| Profile | Layer name | Checks |
+| --- | --- | --- |
+| `batas-administrasi.yaml` | `batas_administrasi` | overlaps, gaps, spikes, slivers |
+| `bidang-tanah.yaml` | `bidang_tanah` | overlaps, spikes, tiny parcels, near-duplicate vertices |
+| `kawasan-hutan.yaml` | `kawasan_hutan` | overlaps, spikes, slivers |
+| `jalan.yaml` | `jalan` | multipart lines, dangles, overshoots/undershoots, short segments |
+| `konsesi-kawasan-hutan.yaml` | `konsesi` + `kawasan_hutan` | concessions that intersect kawasan hutan |
+
+Rules apply to the layer named in each file, so rename `layer` if yours
+differs. Thresholds are in metres and need a projected CRS such as UTM or TM-3.
+
+```python
+import geopandas as gpd
+import geoqc
+
+result = geoqc.audit_dataset(
+    "persil.gpkg", layer="bidang_tanah", profile="docs/examples/bidang-tanah.yaml"
+)
+
+profile = geoqc.load_quality_profile("docs/examples/konsesi-kawasan-hutan.yaml")
+frames = {
+    "konsesi": gpd.read_file("konsesi.gpkg"),
+    "kawasan_hutan": gpd.read_file("kawasan_hutan.gpkg"),
+}
+result = geoqc.audit_layers(frames, profile=profile)
+```
+
+The cross-layer rule (`must_not_intersect`) also reports concessions that only
+share an edge with kawasan hutan.
+
 ## Command-line interface
 
 The initial CLI exposes package information and a stable command surface:

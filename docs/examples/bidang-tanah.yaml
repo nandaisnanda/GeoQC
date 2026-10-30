@@ -1,0 +1,38 @@
+# Bidang tanah (persil/parcel). No overlap between parcels; gaps are not checked
+# because unregistered land between parcels is normal.
+# Geometry and topology only: attribute schemas differ between agencies.
+# Rules apply to a layer named "bidang_tanah"; rename `layer` to match yours.
+# Thresholds are in metres (projected CRS, e.g. TM-3). Adjust per survey precision.
+name: bidang-tanah
+version: 1
+preset: parcel
+enabled_checks: [geometry, crs, topology]
+expected_geometry_types: [Polygon, MultiPolygon]
+crs:
+  required: true
+  require_projected: true
+  allowed: []
+attribute_schema: []
+topology_rules:
+  - type: allowed_geometry_type
+    layer: bidang_tanah
+    allowed_geometry_types: [Polygon, MultiPolygon]
+  - type: no_overlap
+    layer: bidang_tanah
+    tolerance: 0.001
+  - type: no_spikes
+    layer: bidang_tanah
+    minimum_angle: 2.0
+    severity: warning
+  - type: minimum_area
+    layer: bidang_tanah
+    minimum_area: 1.0
+    severity: warning
+  - type: minimum_vertex_distance
+    layer: bidang_tanah
+    minimum_distance: 0.01
+    severity: warning
+quality_gate:
+  minimum_score: 90
+  fail_on: error
+  allow_unknown_crs: false

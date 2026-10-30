@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import geopandas as gpd
+import geopandas as gpd  # type: ignore[import-untyped]
 from pyproj import CRS
 from shapely.geometry import Point, box
 
