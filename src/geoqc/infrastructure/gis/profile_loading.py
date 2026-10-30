@@ -53,6 +53,44 @@ _BUILTIN_PROFILES = {
 
 _DEFAULT_PROFILE = QualityProfile(name="default", require_crs=True)
 
+# Try-out profiles for `geoqc check` without --profile or --preset: no attribute
+# rules and no CRS requirement, picked from the layer geometry type.
+_GENERIC_PROFILES = (
+    (
+        "polygon",
+        QualityProfile(
+            name="generic-polygon",
+            preset=QualityPreset.PARCEL,
+            expected_geometry_types=("Polygon", "MultiPolygon"),
+            require_crs=False,
+        ),
+    ),
+    (
+        "linestring",
+        QualityProfile(
+            name="generic-line",
+            preset=QualityPreset.ROAD,
+            expected_geometry_types=("LineString", "MultiLineString"),
+            require_crs=False,
+        ),
+    ),
+    (
+        "point",
+        QualityProfile(
+            name="generic-point",
+            preset=QualityPreset.POINT_SURVEY,
+            expected_geometry_types=("Point", "MultiPoint"),
+            require_crs=False,
+        ),
+    ),
+)
+
+
+def _generic_profile(geometry_type: str | None) -> QualityProfile | None:
+    """Return the generic profile for an OGR geometry type such as ``LineString Z``."""
+    name = (geometry_type or "").casefold()
+    return next((profile for token, profile in _GENERIC_PROFILES if token in name), None)
+
 
 def load_quality_profile(source: str | Path) -> QualityProfile:
     """Load and validate a versioned JSON or YAML quality profile."""

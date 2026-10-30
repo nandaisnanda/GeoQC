@@ -44,10 +44,10 @@ def audit_geometries(
     # audit entry point applies the same default gate.
     issues.extend(_duplicate_issues(items, dataset_name, severity=Severity.ERROR))
     if selected in {QualityPreset.PARCEL, QualityPreset.ADMIN_BOUNDARY}:
-        issues.extend(_overlap_issues(items, dataset_name, tolerance=tolerance))
-        issues.extend(_gap_issues(items, dataset_name, tolerance=tolerance))
+        issues.extend(_overlap_issues(items, dataset_name, tolerance=tolerance, crs=crs))
+        issues.extend(_gap_issues(items, dataset_name, tolerance=tolerance, crs=crs))
         if minimum_area:
-            issues.extend(_minimum_area_issues(items, dataset_name, minimum_area))
+            issues.extend(_minimum_area_issues(items, dataset_name, minimum_area, crs=crs))
     elif selected is QualityPreset.ROAD:
         issues.extend(_road_issues(items, dataset_name, tolerance))
     elif selected is QualityPreset.POINT_SURVEY and tolerance:

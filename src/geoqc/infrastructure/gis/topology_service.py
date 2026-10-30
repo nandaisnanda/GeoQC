@@ -25,6 +25,7 @@ def evaluate_topology_rules(
         for layer in layers
     }
     attributes = {layer.name: layer.attributes for layer in layers}
+    crs_by_layer = {layer.name: layer.crs for layer in layers}
     if len(loaded) != len(layers):
         raise ValueError("layer names must be unique")
     findings: list[DatasetIssue] = []
@@ -32,15 +33,18 @@ def evaluate_topology_rules(
         if rule.layer not in loaded:
             raise ValueError(f"unknown layer: {rule.layer}")
         source = loaded[rule.layer]
+        crs = crs_by_layer[rule.layer]
         if rule.rule_type is TopologyRuleType.NO_OVERLAP:
-            findings.extend(_overlap_issues(source, rule.layer, rule.tolerance, rule.severity))
+            findings.extend(
+                _overlap_issues(source, rule.layer, rule.tolerance, rule.severity, crs=crs)
+            )
         elif rule.rule_type is TopologyRuleType.NO_GAP:
-            findings.extend(_gap_issues(source, rule.layer, rule.tolerance, rule.severity))
+            findings.extend(_gap_issues(source, rule.layer, rule.tolerance, rule.severity, crs=crs))
         elif rule.rule_type is TopologyRuleType.NO_DUPLICATE:
             findings.extend(_duplicate_issues(source, rule.layer, rule.tolerance, rule.severity))
         elif rule.rule_type is TopologyRuleType.MINIMUM_AREA:
             findings.extend(
-                _minimum_area_issues(source, rule.layer, rule.minimum_area, rule.severity)
+                _minimum_area_issues(source, rule.layer, rule.minimum_area, rule.severity, crs=crs)
             )
         elif rule.rule_type in {
             TopologyRuleType.MUST_BE_INSIDE,

@@ -7,7 +7,7 @@ from typing import Annotated
 from uuid import uuid4
 
 import typer
-from pyogrio import list_layers  # type: ignore[import-untyped]
+from pyogrio import list_layers, read_info  # type: ignore[import-untyped]
 from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
 
 from geoqc import (
@@ -35,6 +35,7 @@ from geoqc.infrastructure.gis.parallel_audit import (
     DatasetAuditWorker,
     audit_dataset_worker,
 )
+from geoqc.infrastructure.gis.profile_loading import _generic_profile
 from geoqc.infrastructure.gis.road_dataset_repair import RoadDatasetRepairer
 from geoqc.infrastructure.reporting import BenchmarkFormat, write_benchmark_report
 from geoqc.interfaces.cli.delivery import app as delivery_app
@@ -107,6 +108,48 @@ def _gpkg_layers(source: Path) -> list[str]:
     if source.suffix.casefold() != ".gpkg" or not source.is_file():
         return []
     return [str(item[0]) for item in list_layers(source)]
+
+
+def _auto_profile(source: Path, layer: str | None) -> QualityProfile:
+    """Pick a generic profile from the layer geometry type and say which one."""
+    geometry_type = read_info(source, layer=layer).get("geometry_type")
+    profile = _generic_profile(geometry_type) or QualityProfile(
+        name="geometry-cli", require_crs=False
+    )
+    target = source.name if layer is None else f"{source.name}:{layer}"
+    typer.echo(f"Preset: {profile.name} (geometry type {geometry_type or 'unknown'} in {target})")
+    return profile
+
+
+_REPORT_HINT = 'HTML report skipped: install the report extra with pip install "geoqc[report]".'
+
+
+def _default_output(source: Path, layer: str | None, suffix: str) -> Path:
+    stem = source.stem if layer is None else f"{source.stem}_{layer}"
+    return source.with_name(f"{stem}_{suffix}")
+
+
+def _write_check_outputs(
+    result: DatasetAuditResult,
+    issues: Path | None,
+    report: Path | None,
+    *,
+    overwrite_issues: bool,
+    overwrite_report: bool,
+) -> list[str]:
+    """Write the issue GeoPackage and report, returning the lines to print."""
+    lines = []
+    if issues is not None:
+        write_issue_layers(result, issues, overwrite=overwrite_issues)
+        lines.append(f"Issue layers: {issues.resolve()}")
+    if report is not None:
+        try:
+            write_audit_report(result, report, overwrite=overwrite_report)
+        except ImportError:
+            lines.append(_REPORT_HINT)
+        else:
+            lines.append(f"Report: {report.resolve()}")
+    return lines
 
 
 @app.callback()
@@ -336,6 +379,13 @@ def check_dataset(
         bool,
         typer.Option("--overwrite", help="Replace an existing issue GeoPackage."),
     ] = False,
+    no_output: Annotated[
+        bool,
+        typer.Option(
+            "--no-output",
+            help="Skip the default report and issue GeoPackage written next to the input.",
+        ),
+    ] = False,
 ) -> None:
     """Run the unified, profile-driven dataset quality workflow."""
     warnings.warn(
@@ -344,24 +394,24 @@ def check_dataset(
         stacklevel=2,
     )
     try:
-        profile = (
-            load_quality_profile(profile_path)
-            if profile_path is not None
-            else QualityProfile(
-                name=f"{preset.value if preset else 'geometry'}-cli",
-                preset=preset,
-                require_crs=False,
-            )
-        )
+        profile: QualityProfile | None = None
+        if profile_path is not None:
+            profile = load_quality_profile(profile_path)
+        elif preset is not None:
+            profile = QualityProfile(name=f"{preset.value}-cli", preset=preset, require_crs=False)
         layers = _gpkg_layers(source) if layer is None else []
+        if profile is None and len(layers) <= 1:
+            profile = _auto_profile(source, layer)
     except (DataSourceError, FileNotFoundError, OSError, TypeError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
 
+    # Generic profiles use the default gate, so a per-layer pick does not change it.
+    gate = profile.gate if profile is not None else QualityGatePolicy()
     policy = QualityGatePolicy(
-        minimum_score=(minimum_score if minimum_score is not None else profile.gate.minimum_score),
-        fail_on=fail_on or profile.gate.fail_on,
-        allow_unknown_crs=profile.gate.allow_unknown_crs,
+        minimum_score=(minimum_score if minimum_score is not None else gate.minimum_score),
+        fail_on=fail_on or gate.fail_on,
+        allow_unknown_crs=gate.allow_unknown_crs,
     )
     if len(layers) > 1:
         if issues is not None or report is not None:
@@ -373,7 +423,19 @@ def check_dataset(
         worst = 0
         for name in layers:
             try:
-                layer_result = run_dataset_audit(source, layer=name, profile=profile)
+                layer_profile = profile or _auto_profile(source, name)
+                layer_result = run_dataset_audit(source, layer=name, profile=layer_profile)
+                written = (
+                    []
+                    if no_output
+                    else _write_check_outputs(
+                        layer_result,
+                        _default_output(source, name, "issues.gpkg"),
+                        _default_output(source, name, "report.html"),
+                        overwrite_issues=True,
+                        overwrite_report=True,
+                    )
+                )
             except (DataSourceError, OSError, TypeError, ValueError) as error:
                 typer.echo(f"QC error: dataset={source.name} layer={name} error={error}")
                 worst = 2
@@ -385,18 +447,26 @@ def check_dataset(
                 f"score={layer_result.quality_score:.2f} "
                 f"status={'PASS' if layer_passed else 'FAIL'}"
             )
+            for line in written:
+                typer.echo(line)
             if not layer_passed:
                 worst = max(worst, 1)
         if worst:
             raise typer.Exit(code=worst)
         return
 
+    # Default outputs are regenerated on every run; explicit paths keep --overwrite rules.
+    issues_path = issues or (None if no_output else _default_output(source, layer, "issues.gpkg"))
+    report_path = report or (None if no_output else _default_output(source, layer, "report.html"))
     try:
         result = run_dataset_audit(source, layer=layer, profile=profile)
-        if issues is not None:
-            write_issue_layers(result, issues, overwrite=overwrite)
-        if report is not None:
-            write_audit_report(result, report)
+        written = _write_check_outputs(
+            result,
+            issues_path,
+            report_path,
+            overwrite_issues=overwrite or issues is None,
+            overwrite_report=report is None,
+        )
     except (FileExistsError, FileNotFoundError, OSError, TypeError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
@@ -406,10 +476,8 @@ def check_dataset(
         f"issues={len(result.issues)} score={result.quality_score:.2f} "
         f"status={'PASS' if result.passes(policy) else 'FAIL'}"
     )
-    if issues is not None:
-        typer.echo(f"Issue layers: {issues.resolve()}")
-    if report is not None:
-        typer.echo(f"Report: {report.resolve()}")
+    for line in written:
+        typer.echo(line)
     if not result.passes(policy):
         raise typer.Exit(code=1)
 

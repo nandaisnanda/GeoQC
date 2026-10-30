@@ -1,8 +1,12 @@
 """Shapely-backed builders for canonical dataset findings."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 
+import geopandas as gpd  # type: ignore[import-untyped]
+import numpy as np
 import shapely
+from pyproj import CRS, Transformer
 from shapely.geometry import GeometryCollection, MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.strtree import STRtree
@@ -101,16 +105,64 @@ def _geometry_issues(items: Sequence[BaseGeometry], layer: str) -> list[DatasetI
     return findings
 
 
+@dataclass(frozen=True, slots=True)
+class _AreaUnits:
+    """Formats areas in CRS units, or in metres through UTM for a geographic CRS."""
+
+    unit: str
+    note: str = ""
+    project: Callable[[BaseGeometry], BaseGeometry] | None = None
+
+    def text(self, geometry: BaseGeometry) -> str:
+        measured = self.project(geometry) if self.project is not None else geometry
+        return f"{measured.area:.6g} {self.unit}{self.note}"
+
+
+_AREA_UNIT_NAMES = {
+    "metre": "m²",
+    "meter": "m²",
+    "foot": "ft²",
+    "US survey foot": "US ft²",
+}
+
+
+def _area_units(items: Sequence[BaseGeometry], crs: str | None) -> _AreaUnits:
+    if crs is None:
+        return _AreaUnits("square units")
+    parsed = CRS.from_user_input(crs)
+    if not parsed.is_geographic:
+        unit = parsed.axis_info[0].unit_name if parsed.axis_info else ""
+        return _AreaUnits(_AREA_UNIT_NAMES.get(unit, f"square {unit or 'units'}"))
+    finite = [item for item in items if not item.is_empty and _has_finite_coordinates(item)]
+    try:
+        utm = gpd.GeoSeries(finite, crs=parsed).estimate_utm_crs() if finite else None
+    except RuntimeError:
+        # Coordinates outside the lon/lat range have no UTM zone.
+        utm = None
+    if utm is None:
+        return _AreaUnits("square degrees")
+    transformer = Transformer.from_crs(parsed, utm, always_xy=True)
+    return _AreaUnits(
+        "m²",
+        f" (measured in {utm.to_string()}; the dataset CRS is geographic)",
+        lambda geometry: shapely.transform(
+            geometry, lambda xy: np.column_stack(transformer.transform(xy[:, 0], xy[:, 1]))
+        ),
+    )
+
+
 def _overlap_issues(
     items: Sequence[BaseGeometry],
     layer: str,
     tolerance: float = 0.0,
     severity: Severity = Severity.ERROR,
+    crs: str | None = None,
 ) -> list[DatasetIssue]:
     findings: list[DatasetIssue] = []
     tree = STRtree(items) if items else None
     if tree is None:
         return findings
+    units: _AreaUnits | None = None
     for left, geometry in enumerate(items):
         # Invalid geometries are reported by the geometry checks; GEOS overlay
         # operations can raise on them, so they are excluded here.
@@ -123,14 +175,13 @@ def _overlap_issues(
             overlap = geometry.intersection(items[right])
             if overlap.is_empty or overlap.area <= tolerance:
                 continue
+            units = units or _area_units(items, crs)
             findings.append(
                 _issue(
                     code="TOP-NO-OVERLAP",
                     issue_type="overlap",
                     title="Overlapping features",
-                    message=(
-                        f"Features {left} and {right} overlap by {overlap.area:.6g} square units."
-                    ),
+                    message=(f"Features {left} and {right} overlap by {units.text(overlap)}."),
                     severity=severity,
                     category="topology",
                     recommendation=(
@@ -152,6 +203,7 @@ def _gap_issues(
     layer: str,
     tolerance: float = 0.0,
     severity: Severity = Severity.WARNING,
+    crs: str | None = None,
 ) -> list[DatasetIssue]:
     polygonal = [
         item
@@ -165,15 +217,17 @@ def _gap_issues(
     for polygon in _polygon_parts(covered):
         holes.extend(Polygon(ring) for ring in polygon.interiors)
     findings = []
+    units = _area_units(polygonal, crs) if holes else None
     for hole in holes:
         if tolerance and hole.area > tolerance:
             continue
+        assert units is not None
         findings.append(
             _issue(
                 code="TOP-NO-GAP",
                 issue_type="gap",
                 title="Enclosed coverage gap",
-                message=f"Coverage contains an enclosed gap of {hole.area:.6g} square units.",
+                message=f"Coverage contains an enclosed gap of {units.text(hole)}.",
                 severity=severity,
                 category="topology",
                 recommendation="Review the surrounding boundaries before assigning the gap.",
@@ -241,13 +295,28 @@ def _minimum_area_issues(
     layer: str,
     minimum: float,
     severity: Severity = Severity.WARNING,
+    crs: str | None = None,
 ) -> list[DatasetIssue]:
+    flagged = [
+        (index, geometry)
+        for index, geometry in enumerate(items)
+        # Invalid geometries are reported by the geometry checks; their area is unreliable.
+        if not geometry.is_empty and _is_valid(geometry) and geometry.area < minimum
+    ]
+    if not flagged:
+        return []
+    units = _area_units(items, crs)
+    # The threshold is compared in CRS units even when the message reports metres.
+    threshold_unit = "square degrees" if units.project is not None else units.unit
     return [
         _issue(
             code="TOP-MINIMUM-AREA",
             issue_type="below_minimum_area",
             title="Feature below minimum area",
-            message=f"Feature {index} area {geometry.area:.6g} is below {minimum:.6g}.",
+            message=(
+                f"Feature {index} area {units.text(geometry)} is below "
+                f"{minimum:.6g} {threshold_unit}."
+            ),
             severity=severity,
             category="topology",
             recommendation="Review whether the feature is a sliver, island, or valid small object.",
@@ -257,9 +326,7 @@ def _minimum_area_issues(
             feature_index=index,
             metadata={"area": float(geometry.area), "minimum_area": minimum},
         )
-        for index, geometry in enumerate(items)
-        # Invalid geometries are reported by the geometry checks; their area is unreliable.
-        if not geometry.is_empty and _is_valid(geometry) and geometry.area < minimum
+        for index, geometry in flagged
     ]
 
 
