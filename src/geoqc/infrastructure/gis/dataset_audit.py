@@ -16,6 +16,7 @@ from geoqc.domain.models import (
     QualityProfile,
 )
 from geoqc.infrastructure.gis.dataset_checks import (
+    _METRIC_PRESETS,
     _attach_feature_ids,
     _attribute_issues,
     _check_name,
@@ -57,6 +58,15 @@ def audit_geodataframe(
         if any(geometry.geom_type.casefold() not in allowed_types for geometry in frame.geometry):
             selected_preset = None
     crs = frame.crs.to_string() if frame.crs is not None else None
+    reported_preset = selected_preset
+    # Area, length, overlap and road checks are meaningless without a CRS.
+    if (
+        crs is None
+        and profile is not None
+        and selected_preset is not None
+        and QualityPreset(selected_preset) in _METRIC_PRESETS
+    ):
+        selected_preset = None
     metric_safe = profile is None or _metric_skip_reason(frame, profile) is None
     base = audit_geometries(
         tuple(frame.geometry),
@@ -68,6 +78,8 @@ def audit_geodataframe(
         scoring=profile.scoring if profile else None,
         profile_name=profile.name if profile else None,
     )
+    if reported_preset is not selected_preset:
+        base = replace(base, preset=QualityPreset(reported_preset) if reported_preset else None)
     issues = list(base.issues)
     if profile is not None:
         issues.extend(_geometry_type_issues(frame, dataset_name, profile))

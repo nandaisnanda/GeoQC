@@ -16,13 +16,20 @@ from geoqc.domain.models import (
     CheckStatus,
     DatasetAuditResult,
     DatasetIssue,
+    QualityPreset,
     QualityProfile,
     RepairRisk,
     TopologyRule,
     TopologyRuleType,
 )
 from geoqc.domain.rules import Severity
+from geoqc.infrastructure.gis.crs_analysis import _guess_missing_crs
 from geoqc.infrastructure.gis.dataset_values import _kind, _wkt
+
+MISSING_CRS_MESSAGE = "Dataset CRS is missing."
+_METRIC_PRESETS = frozenset(
+    {QualityPreset.PARCEL, QualityPreset.ADMIN_BOUNDARY, QualityPreset.ROAD}
+)
 
 
 def _checks_for_result(
@@ -51,6 +58,13 @@ def _checks_for_result(
                     name, CheckStatus.SKIPPED, reason="No attribute schema configured."
                 )
             )
+        elif (
+            name == "topology"
+            and profile is not None
+            and profile.preset in _METRIC_PRESETS
+            and result.crs_guard.crs is None
+        ):
+            checks_out.append(AuditCheckResult(name, CheckStatus.SKIPPED, reason="CRS missing"))
         elif (
             name == "topology"
             and profile is not None
@@ -325,10 +339,14 @@ def _attribute_issue(
 
 def _crs_issues(frame: gpd.GeoDataFrame, layer: str, profile: QualityProfile) -> list[DatasetIssue]:
     geometry = next((item for item in frame.geometry if not item.is_empty), Point())
-    if frame.crs is None and profile.require_crs:
-        return [_metadata_issue(layer, geometry, "missing_crs", "Dataset CRS is required.")]
     if frame.crs is None:
-        return []
+        hint, _ = _guess_missing_crs(tuple(frame.geometry))
+        severity = Severity.ERROR if profile.require_crs else Severity.WARNING
+        return [
+            _metadata_issue(
+                layer, geometry, "missing_crs", MISSING_CRS_MESSAGE + hint, severity=severity
+            )
+        ]
     parsed = CRS.from_user_input(frame.crs)
     issues = []
     if profile.require_projected_crs and parsed.is_geographic:
@@ -345,14 +363,18 @@ def _crs_issues(frame: gpd.GeoDataFrame, layer: str, profile: QualityProfile) ->
 
 
 def _metadata_issue(
-    layer: str, geometry: BaseGeometry, issue_type: str, message: str
+    layer: str,
+    geometry: BaseGeometry,
+    issue_type: str,
+    message: str,
+    severity: Severity = Severity.ERROR,
 ) -> DatasetIssue:
     return DatasetIssue(
         code=f"META-{issue_type.upper()}",
         issue_type=issue_type,
         title=issue_type.replace("_", " ").title(),
         message=message,
-        severity=Severity.ERROR,
+        severity=severity,
         category="metadata",
         recommendation=(
             "Define a valid projected CRS, or transform to a CRS allowed by the quality profile."

@@ -1,6 +1,7 @@
 """End-to-end delivery command contracts with real small geospatial datasets."""
 
 import json
+import shutil
 from pathlib import Path
 
 import geopandas as gpd  # type: ignore[import-untyped]
@@ -8,12 +9,18 @@ import pytest
 from shapely.geometry import Point
 from typer.testing import CliRunner
 
+from geoqc import audit_dataset
 from geoqc.application.services import (
     AxisOrderDetector,
     CrsConsistencyScanner,
     DatumShiftDetector,
 )
-from geoqc.domain.models import DatumShiftSample, DatumTransformationEvidence
+from geoqc.domain.models import (
+    DatumShiftSample,
+    DatumTransformationEvidence,
+    QualityPreset,
+    QualityProfile,
+)
 from geoqc.infrastructure.gis.pyproj_datum_inspector import PyprojDatumTransformationInspector
 from geoqc.infrastructure.reporting import HtmlReportRenderer
 from geoqc.interfaces.cli import delivery
@@ -276,3 +283,51 @@ def test_service_internal_failure_is_exit_three(
         "error": "Unexpected internal failure.",
         "status": "internal_error",
     }
+
+
+def test_check_reports_missing_crs_with_hint_and_skips_road_checks(tmp_path: Path) -> None:
+    for suffix in (".shp", ".shx", ".dbf"):
+        shutil.copy(Path("testdata") / f"jalanlokal{suffix}", tmp_path / f"jalanlokal{suffix}")
+    source = tmp_path / "jalanlokal.shp"
+
+    result = RUNNER.invoke(app, ["check", str(source), "--preset", "road", "--no-output"])
+
+    assert "CRS: missing. " in result.output
+    assert "UTM" in result.output
+    profile = QualityProfile(name="road-cli", preset=QualityPreset.ROAD, require_crs=False)
+    codes = [issue.code for issue in audit_dataset(source, profile=profile).issues]
+    assert codes.count("META-MISSING_CRS") == 1
+    assert not [code for code in codes if code.startswith("ROAD-")]
+
+
+def test_check_outputs_go_to_geoqc_output_and_audit_ignores_them(tmp_path: Path) -> None:
+    for suffix in (".shp", ".shx", ".dbf", ".prj", ".cpg"):
+        shutil.copy(Path("testdata") / f"jalanlokal{suffix}", tmp_path / f"jalanlokal{suffix}")
+    shutil.copy(Path("testdata") / "jalan_setapak.gpkg", tmp_path / "jalan_setapak.gpkg")
+    source = tmp_path / "jalanlokal.shp"
+
+    before = RUNNER.invoke(app, ["audit", str(tmp_path)])
+    checked = RUNNER.invoke(app, ["check", str(source), "--preset", "road"])
+    after = RUNNER.invoke(app, ["audit", str(tmp_path)])
+
+    output_dir = tmp_path / "geoqc_output"
+    assert checked.exit_code in {0, 1}, checked.output
+    assert (output_dir / "jalanlokal_issues.gpkg").is_file()
+    assert (output_dir / "jalanlokal_report.html").is_file() or "HTML report skipped" in (
+        checked.output
+    )
+    assert not (tmp_path / "jalanlokal_issues.gpkg").exists()
+    assert before.output.count("PROCESSED") == 2
+    assert after.output.count("PROCESSED") == before.output.count("PROCESSED")
+    assert "geoqc_output" not in after.output
+
+
+def test_audit_skips_stray_issues_gpkg_but_accepts_it_when_named(tmp_path: Path) -> None:
+    shutil.copy(Path("testdata") / "jalan_setapak.gpkg", tmp_path / "jalan_setapak.gpkg")
+    shutil.copy(Path("testdata") / "jalan_setapak.gpkg", tmp_path / "jalan_setapak_issues.gpkg")
+
+    folder = RUNNER.invoke(app, ["audit", str(tmp_path)])
+    named = RUNNER.invoke(app, ["audit", str(tmp_path / "jalan_setapak_issues.gpkg")])
+
+    assert folder.output.count("PROCESSED") == 1
+    assert named.output.count("PROCESSED") == 1

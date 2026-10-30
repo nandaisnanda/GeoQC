@@ -1,0 +1,36 @@
+# Batas administrasi (provinsi, kabupaten/kota, kecamatan, desa).
+# Geometry and topology only: attribute schemas differ between agencies.
+# Rules apply to a layer named "batas_administrasi"; rename `layer` to match yours.
+# Thresholds are in metres (projected CRS, e.g. UTM or TM-3). Adjust per scale.
+name: batas-administrasi
+version: 1
+preset: admin_boundary
+enabled_checks: [geometry, crs, topology]
+expected_geometry_types: [Polygon, MultiPolygon]
+crs:
+  required: true
+  require_projected: true
+  allowed: []
+attribute_schema: []
+topology_rules:
+  - type: allowed_geometry_type
+    layer: batas_administrasi
+    allowed_geometry_types: [Polygon, MultiPolygon]
+  - type: no_overlap
+    layer: batas_administrasi
+    tolerance: 0.01
+  - type: no_gap
+    layer: batas_administrasi
+    tolerance: 0.01
+  - type: no_spikes
+    layer: batas_administrasi
+    minimum_angle: 1.0
+    severity: warning
+  - type: minimum_area
+    layer: batas_administrasi
+    minimum_area: 100.0
+    severity: warning
+quality_gate:
+  minimum_score: 80
+  fail_on: error
+  allow_unknown_crs: false

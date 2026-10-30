@@ -164,20 +164,27 @@ Shapely geometry raises `TypeError` so contract errors are detected early.
 
 ## Indonesian presets
 
-Ready-made profiles in [docs/examples/](docs/examples/) check geometry and
-topology only. They require no attribute columns, because each agency uses its
-own schema.
+Ready-made profiles check geometry and topology only. They require no
+attribute columns, because each agency uses its own schema. They ship inside the
+package, so a pip install has them. List them with `geoqc presets` and run one
+by name:
 
-| Profile | Layer name | Checks |
+```bash
+geoqc check persil.gpkg --preset bidang-tanah
+```
+
+The same files are in [docs/examples/](docs/examples/) for reference.
+
+| Preset | Layer name | Checks |
 | --- | --- | --- |
-| `batas-administrasi.yaml` | `batas_administrasi` | overlaps, gaps, spikes, slivers |
-| `bidang-tanah.yaml` | `bidang_tanah` | overlaps, spikes, tiny parcels, near-duplicate vertices |
-| `kawasan-hutan.yaml` | `kawasan_hutan` | overlaps, spikes, slivers |
-| `jalan.yaml` | `jalan` | multipart lines, dangles, overshoots/undershoots, short segments |
-| `konsesi-kawasan-hutan.yaml` | `konsesi` + `kawasan_hutan` | concessions that intersect kawasan hutan |
+| `batas-administrasi` | `batas_administrasi` | overlaps, gaps, spikes, slivers |
+| `bidang-tanah` | `bidang_tanah` | overlaps, spikes, tiny parcels, near-duplicate vertices |
+| `kawasan-hutan` | `kawasan_hutan` | overlaps, spikes, slivers |
+| `jalan` | `jalan` | multipart lines, dangles, overshoots/undershoots, short segments |
+| `konsesi-kawasan-hutan` | `konsesi` + `kawasan_hutan` | concessions that intersect kawasan hutan |
 
-Rules apply to the layer named in each file, so rename `layer` if yours
-differs. Thresholds are in metres and need a projected CRS such as UTM or TM-3.
+Rules apply to the layer named in each file (for a single-layer file, its
+file name), so rename `layer` in a copy if yours differs. Thresholds are in metres and need a projected CRS such as UTM or TM-3.
 
 ```python
 import geopandas as gpd

@@ -32,14 +32,14 @@ def _issue_rows(gpkg: Path) -> int:
     return sum(len(gpd.read_file(gpkg, layer=name)) for name, _ in pyogrio.list_layers(gpkg))
 
 
-def test_check_writes_report_and_issue_gpkg_next_to_input(tmp_path: Path) -> None:
+def test_check_writes_report_and_issue_gpkg_in_geoqc_output(tmp_path: Path) -> None:
     source = tmp_path / "parcels.shp"
     _write_parcels(source)
 
     result = _check(str(source))
 
-    issues = tmp_path / "parcels_issues.gpkg"
-    report = tmp_path / "parcels_report.html"
+    issues = tmp_path / "geoqc_output" / "parcels_issues.gpkg"
+    report = tmp_path / "geoqc_output" / "parcels_report.html"
     assert f"Issue layers: {issues.resolve()}" in result.stdout
     assert f"Report: {report.resolve()}" in result.stdout
     assert _issue_rows(issues) == int(result.stdout.split("issues=")[1].split()[0]) > 0
@@ -54,7 +54,7 @@ def test_check_overwrites_default_outputs_on_rerun(tmp_path: Path) -> None:
     result = _check(str(source))
 
     assert result.exit_code != 2, result.output
-    assert (tmp_path / "parcels_issues.gpkg").exists()
+    assert (tmp_path / "geoqc_output" / "parcels_issues.gpkg").exists()
 
 
 def test_no_output_writes_nothing(tmp_path: Path) -> None:
@@ -64,8 +64,8 @@ def test_no_output_writes_nothing(tmp_path: Path) -> None:
     result = _check(str(source), "--no-output")
 
     assert "Issue layers:" not in result.stdout
-    assert not (tmp_path / "parcels_issues.gpkg").exists()
-    assert not (tmp_path / "parcels_report.html").exists()
+    assert not (tmp_path / "geoqc_output" / "parcels_issues.gpkg").exists()
+    assert not (tmp_path / "geoqc_output" / "parcels_report.html").exists()
 
 
 def test_explicit_paths_replace_the_defaults(tmp_path: Path) -> None:
@@ -78,8 +78,8 @@ def test_explicit_paths_replace_the_defaults(tmp_path: Path) -> None:
 
     assert issues.exists()
     assert report.exists()
-    assert not (tmp_path / "parcels_issues.gpkg").exists()
-    assert not (tmp_path / "parcels_report.html").exists()
+    assert not (tmp_path / "geoqc_output" / "parcels_issues.gpkg").exists()
+    assert not (tmp_path / "geoqc_output" / "parcels_report.html").exists()
 
 
 def test_explicit_report_still_written_with_no_output(tmp_path: Path) -> None:
@@ -90,7 +90,7 @@ def test_explicit_report_still_written_with_no_output(tmp_path: Path) -> None:
     _check(str(source), "--no-output", "--report", str(report))
 
     assert report.exists()
-    assert not (tmp_path / "parcels_issues.gpkg").exists()
+    assert not (tmp_path / "geoqc_output" / "parcels_issues.gpkg").exists()
 
 
 def test_missing_report_extra_skips_html_with_hint(
@@ -108,7 +108,7 @@ def test_missing_report_extra_skips_html_with_hint(
     assert result.exit_code != 2, result.output
     assert 'pip install "geoqc[report]"' in result.stdout
     assert "Report:" not in result.stdout
-    assert (tmp_path / "parcels_issues.gpkg").exists()
+    assert (tmp_path / "geoqc_output" / "parcels_issues.gpkg").exists()
 
 
 def test_multi_layer_gpkg_writes_outputs_per_layer(tmp_path: Path) -> None:
@@ -121,8 +121,8 @@ def test_multi_layer_gpkg_writes_outputs_per_layer(tmp_path: Path) -> None:
     _check(str(source))
 
     for name in ("parcels", "wells"):
-        assert (tmp_path / f"multi_{name}_issues.gpkg").exists()
-        assert (tmp_path / f"multi_{name}_report.html").exists()
+        assert (tmp_path / "geoqc_output" / f"multi_{name}_issues.gpkg").exists()
+        assert (tmp_path / "geoqc_output" / f"multi_{name}_report.html").exists()
 
 
 def test_report_places_issues_on_wgs84_map(tmp_path: Path) -> None:
@@ -145,3 +145,71 @@ def test_report_without_crs_has_no_map_locations(tmp_path: Path) -> None:
 
     assert report.issues
     assert all(issue.map_location is None for issue in report.issues)
+
+
+_NAMES = {"batas-administrasi", "bidang-tanah", "kawasan-hutan", "jalan", "konsesi-kawasan-hutan"}
+
+
+def test_presets_command_lists_packaged_and_generic_presets() -> None:
+    result = CliRunner().invoke(app, ["presets"])
+
+    assert result.exit_code == 0, result.output
+    for name in (*_NAMES, "parcel", "road"):
+        assert name in result.stdout
+    assert "Bidang tanah" in result.stdout
+
+
+def test_packaged_presets_match_docs_examples_and_load() -> None:
+    from geoqc.infrastructure.gis.profile_loading import (
+        list_builtin_presets,
+        load_builtin_preset,
+    )
+
+    assert set(list_builtin_presets()) == _NAMES
+    for name in _NAMES:
+        assert load_builtin_preset(name).name == name
+        packaged = (Path(main.__file__).parents[2] / "presets" / f"{name}.yaml").read_bytes()
+        assert packaged == (Path("docs/examples") / f"{name}.yaml").read_bytes()
+
+
+def test_check_accepts_indonesian_preset_name(tmp_path: Path) -> None:
+    source = tmp_path / "bidang_tanah.gpkg"
+    _write_parcels(source)
+
+    result = _check(str(source), "--preset", "bidang-tanah", "--no-output")
+
+    assert result.exit_code != 2, result.output
+    assert "QC complete" in result.stdout
+    assert "issues=0" not in result.stdout
+
+
+def test_check_still_accepts_generic_preset_and_rejects_unknown(tmp_path: Path) -> None:
+    source = tmp_path / "parcels.shp"
+    _write_parcels(source)
+
+    generic = _check(str(source), "--preset", "parcel", "--no-output")
+    unknown = _check(str(source), "--preset", "nope", "--no-output")
+
+    assert generic.exit_code != 2, generic.output
+    assert unknown.exit_code == 2
+    assert "bidang-tanah" in unknown.output
+
+
+def test_preset_warns_when_its_layer_does_not_match_the_dataset(tmp_path: Path) -> None:
+    mismatched = tmp_path / "parcels.shp"
+    matching = tmp_path / "bidang_tanah.gpkg"
+    _write_parcels(mismatched)
+    _write_parcels(matching)
+
+    other = _check(str(mismatched), "--preset", "bidang-tanah", "--no-output")
+    same = _check(str(matching), "--preset", "bidang-tanah", "--no-output")
+
+    assert "no topology rule applies to 'parcels'" in other.stdout
+    assert "bidang_tanah" in other.stdout
+    assert "Warning: no topology rule" not in same.stdout
+
+
+def test_preset_descriptions_stay_on_one_short_line() -> None:
+    from geoqc.infrastructure.gis.profile_loading import list_builtin_presets
+
+    assert all(len(text) <= 80 for text in list_builtin_presets().values())

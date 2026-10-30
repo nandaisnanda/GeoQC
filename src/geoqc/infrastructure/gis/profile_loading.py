@@ -1,7 +1,9 @@
 """Profile loading for the canonical dataset workflow."""
 
 import json
+import re
 from collections.abc import Mapping
+from importlib import resources
 from pathlib import Path
 
 import yaml  # type: ignore[import-untyped]
@@ -107,6 +109,46 @@ def load_quality_profile(source: str | Path) -> QualityProfile:
     if not isinstance(raw, dict):
         raise ValueError("quality profile root must be an object")
     return quality_profile_from_dict(raw)
+
+
+_DESCRIPTION_WIDTH = 72
+
+
+def list_builtin_presets() -> dict[str, str]:
+    """Map each packaged Indonesian preset name to its one-line description."""
+    presets: dict[str, str] = {}
+    for item in resources.files("geoqc.presets").iterdir():
+        if item.name.endswith(".yaml"):
+            presets[item.name.removesuffix(".yaml")] = _first_sentence(
+                item.read_text(encoding="utf-8")
+            )
+    return dict(sorted(presets.items()))
+
+
+def load_builtin_preset(name: str) -> QualityProfile:
+    """Load a packaged Indonesian preset by name, e.g. ``bidang-tanah``."""
+    if name not in list_builtin_presets():
+        raise ValueError(f"unknown preset: {name}")
+    text = (resources.files("geoqc.presets") / f"{name}.yaml").read_text(encoding="utf-8")
+    raw = yaml.safe_load(text)
+    if not isinstance(raw, dict):
+        raise ValueError("quality profile root must be an object")
+    return quality_profile_from_dict(raw)
+
+
+def _first_sentence(yaml_text: str) -> str:
+    """First sentence of the leading comment block of a preset file."""
+    comment = []
+    for line in yaml_text.splitlines():
+        if not line.startswith("#"):
+            break
+        comment.append(line.lstrip("#").strip())
+    text = " ".join(comment)
+    match = re.match(r"(.*?\.)(?:\s|$)", text)
+    sentence = match.group(1) if match else text
+    if len(sentence) <= _DESCRIPTION_WIDTH:
+        return sentence
+    return sentence[:_DESCRIPTION_WIDTH].rsplit(" ", 1)[0] + "..."
 
 
 def quality_profile_from_dict(raw: Mapping[str, object]) -> QualityProfile:

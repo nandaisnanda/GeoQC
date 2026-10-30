@@ -1,0 +1,33 @@
+# Kawasan hutan (forest area designation). Function zones must not overlap.
+# Geometry and topology only: attribute schemas differ between agencies.
+# Rules apply to a layer named "kawasan_hutan"; rename `layer` to match yours.
+# Thresholds are in metres (projected CRS, e.g. UTM). Adjust per map scale.
+name: kawasan-hutan
+version: 1
+preset: admin_boundary
+enabled_checks: [geometry, crs, topology]
+expected_geometry_types: [Polygon, MultiPolygon]
+crs:
+  required: true
+  require_projected: true
+  allowed: []
+attribute_schema: []
+topology_rules:
+  - type: allowed_geometry_type
+    layer: kawasan_hutan
+    allowed_geometry_types: [Polygon, MultiPolygon]
+  - type: no_overlap
+    layer: kawasan_hutan
+    tolerance: 0.1
+  - type: no_spikes
+    layer: kawasan_hutan
+    minimum_angle: 1.0
+    severity: warning
+  - type: minimum_area
+    layer: kawasan_hutan
+    minimum_area: 1000.0
+    severity: warning
+quality_gate:
+  minimum_score: 80
+  fail_on: error
+  allow_unknown_crs: false

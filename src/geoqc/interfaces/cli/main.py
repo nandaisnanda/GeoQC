@@ -35,12 +35,17 @@ from geoqc.application.services import BatchProcessor
 from geoqc.domain.models import DatasetAuditResult, RepairStatus
 from geoqc.domain.models.spatial_intelligence import RoadNetworkRepairConfig
 from geoqc.domain.rules import Severity
+from geoqc.infrastructure.gis.dataset_checks import MISSING_CRS_MESSAGE
 from geoqc.infrastructure.gis.parallel_audit import (
     DatasetAudit,
     DatasetAuditWorker,
     audit_dataset_worker,
 )
-from geoqc.infrastructure.gis.profile_loading import _generic_profile
+from geoqc.infrastructure.gis.profile_loading import (
+    _generic_profile,
+    list_builtin_presets,
+    load_builtin_preset,
+)
 from geoqc.infrastructure.gis.road_dataset_repair import RoadDatasetRepairer
 from geoqc.infrastructure.reporting import BenchmarkFormat, write_benchmark_report
 from geoqc.interfaces.cli.delivery import app as delivery_app
@@ -63,6 +68,30 @@ _SHAPEFILE_SIDECARS = frozenset(
 )
 
 
+OUTPUT_DIR_NAME = "geoqc_output"
+
+
+def _is_check_output(path: Path, folder: Path) -> bool:
+    """Whether a file found under a folder input is a `check` output, not data."""
+    if path.name.casefold().endswith("_issues.gpkg"):
+        return True
+    return OUTPUT_DIR_NAME in path.relative_to(folder).parts[:-1]
+
+
+def _drop_check_outputs(inputs: list[Path], sources: tuple[Path, ...]) -> tuple[Path, ...]:
+    """Remove `check` outputs found via folder inputs; files named directly stay."""
+    explicit = {item.resolve() for item in inputs if item.is_file()}
+    folders = [item.resolve() for item in inputs if item.is_dir()]
+    return tuple(
+        source
+        for source in sources
+        if source in explicit
+        or not any(
+            source.is_relative_to(folder) and _is_check_output(source, folder) for folder in folders
+        )
+    )
+
+
 def _skipped_files(inputs: list[Path], sources: tuple[Path, ...], recursive: bool) -> list[str]:
     """List folder files that discovery ignored, without shapefile sidecars."""
     kept = set(sources)
@@ -78,6 +107,10 @@ def _skipped_files(inputs: list[Path], sources: tuple[Path, ...], recursive: boo
             if not candidate.is_file() or candidate.resolve() in kept:
                 continue
             resolved = candidate.resolve()
+            if resolved.is_relative_to(folder.resolve()) and _is_check_output(
+                resolved, folder.resolve()
+            ):
+                continue
             if (
                 candidate.suffix.casefold() in _SHAPEFILE_SIDECARS
                 and (resolved.parent, resolved.stem.casefold()) in shapefiles
@@ -85,6 +118,23 @@ def _skipped_files(inputs: list[Path], sources: tuple[Path, ...], recursive: boo
                 continue
             skipped.append(candidate.relative_to(folder).as_posix())
     return sorted(skipped, key=str.casefold)
+
+
+def _echo_missing_crs(result: DatasetAuditResult) -> None:
+    for issue in result.issues:
+        if issue.code == "META-MISSING_CRS":
+            typer.echo(f"CRS: missing. {issue.message.removeprefix(MISSING_CRS_MESSAGE)}".strip())
+            return
+
+
+def _echo_unmatched_rules(profile: QualityProfile | None, dataset_name: str) -> None:
+    """Warn when a profile's topology rules name layers other than this dataset."""
+    layers = sorted({rule.layer for rule in profile.topology_rules}) if profile else []
+    if layers and dataset_name not in layers:
+        typer.echo(
+            f"Warning: no topology rule applies to '{dataset_name}'; the profile targets "
+            f"layer(s) {', '.join(layers)}. Use --layer or rename the layer to match."
+        )
 
 
 def _echo_skipped(skipped: list[str]) -> None:
@@ -126,12 +176,24 @@ def _auto_profile(source: Path, layer: str | None) -> QualityProfile:
     return profile
 
 
+def _preset_profile(name: str) -> QualityProfile:
+    """Resolve a packaged Indonesian preset or a generic preset by name."""
+    if name in list_builtin_presets():
+        return load_builtin_preset(name)
+    try:
+        generic = QualityPreset(name)
+    except ValueError:
+        valid = ", ".join([*list_builtin_presets(), *(item.value for item in QualityPreset)])
+        raise ValueError(f"unknown preset '{name}'. Valid presets: {valid}") from None
+    return QualityProfile(name=f"{generic.value}-cli", preset=generic, require_crs=False)
+
+
 _REPORT_HINT = 'HTML report skipped: install the report extra with pip install "geoqc[report]".'
 
 
 def _default_output(source: Path, layer: str | None, suffix: str) -> Path:
     stem = source.stem if layer is None else f"{source.stem}_{layer}"
-    return source.with_name(f"{stem}_{suffix}")
+    return source.parent / OUTPUT_DIR_NAME / f"{stem}_{suffix}"
 
 
 def _write_check_outputs(
@@ -144,6 +206,9 @@ def _write_check_outputs(
 ) -> list[str]:
     """Write the issue GeoPackage and report, returning the lines to print."""
     lines = []
+    for target in (issues, report):
+        if target is not None:
+            target.parent.mkdir(parents=True, exist_ok=True)
     if issues is not None:
         write_issue_layers(result, issues, overwrite=overwrite_issues)
         lines.append(f"Issue layers: {issues.resolve()}")
@@ -232,7 +297,7 @@ def audit(
         audit_dataset_worker, supported_suffixes=AUDIT_SUFFIXES
     )
     try:
-        sources = discovery.discover(inputs, recursive=recursive)
+        sources = _drop_check_outputs(inputs, discovery.discover(inputs, recursive=recursive))
     except (FileNotFoundError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
@@ -349,6 +414,18 @@ def audit(
         raise typer.Exit(code=1)
 
 
+@app.command("presets")
+def list_presets() -> None:
+    """List the built-in presets for `geoqc check --preset`."""
+    descriptions = {
+        **list_builtin_presets(),
+        **{item.value: "Generic preset by geometry type." for item in QualityPreset},
+    }
+    width = max(len(name) for name in descriptions)
+    for name, description in descriptions.items():
+        typer.echo(f"{name.ljust(width)}  {description}")
+
+
 @app.command("check")
 def check_dataset(
     source: Annotated[Path, typer.Argument(help="Input vector dataset.")],
@@ -357,8 +434,8 @@ def check_dataset(
         typer.Option("--profile", help="JSON or YAML quality profile."),
     ] = None,
     preset: Annotated[
-        QualityPreset | None,
-        typer.Option(help="Built-in preset when no profile is supplied."),
+        str | None,
+        typer.Option(help="Built-in preset when no profile is supplied. See `geoqc presets`."),
     ] = None,
     layer: Annotated[
         str | None,
@@ -403,7 +480,7 @@ def check_dataset(
         if profile_path is not None:
             profile = load_quality_profile(profile_path)
         elif preset is not None:
-            profile = QualityProfile(name=f"{preset.value}-cli", preset=preset, require_crs=False)
+            profile = _preset_profile(preset)
         layers = _gpkg_layers(source) if layer is None else []
         if profile is None and len(layers) <= 1:
             profile = _auto_profile(source, layer)
@@ -446,6 +523,7 @@ def check_dataset(
                 worst = 2
                 continue
             layer_passed = layer_result.passes(policy)
+            _echo_unmatched_rules(layer_profile, name)
             typer.echo(
                 f"QC complete: dataset={source.name} layer={name} "
                 f"features={layer_result.feature_count} issues={len(layer_result.issues)} "
@@ -481,6 +559,8 @@ def check_dataset(
         f"issues={len(result.issues)} score={result.quality_score:.2f} "
         f"status={'PASS' if result.passes(policy) else 'FAIL'}"
     )
+    _echo_missing_crs(result)
+    _echo_unmatched_rules(profile, result.dataset_name)
     for line in written:
         typer.echo(line)
     if not result.passes(policy):
