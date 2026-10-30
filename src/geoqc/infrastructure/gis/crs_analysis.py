@@ -64,7 +64,11 @@ def _suggest_utm(geometries: Sequence[BaseGeometry]) -> str | None:
     usable = [item for item in geometries if not item.is_empty and _is_valid(item)]
     if not usable:
         return None
-    center = shapely.union_all(usable).centroid
+    try:
+        center = shapely.union_all(usable).centroid
+    except shapely.errors.GEOSException:
+        # Valid but extreme coordinates (about 1e300) can still fail inside GEOS.
+        return None
     if center.is_empty or not (-180 <= center.x <= 180 and -90 <= center.y <= 90):
         return None
     zone = min(60, max(1, int((center.x + 180) // 6) + 1))

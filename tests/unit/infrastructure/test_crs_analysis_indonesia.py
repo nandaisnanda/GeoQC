@@ -4,7 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd  # type: ignore[import-untyped]
 from pyproj import CRS
-from shapely.geometry import Point, box
+from shapely.geometry import LineString, Point, Polygon, box
 
 import geoqc
 from geoqc.infrastructure.gis.crs_analysis import assess_crs
@@ -70,3 +70,14 @@ def test_shapefile_without_prj_gets_crs_suggestion(tmp_path: Path) -> None:
     assert result.crs_guard.crs is None
     assert result.crs_guard.suggested_projected_crs == "EPSG:32749"
     assert "WGS 84" in result.crs_guard.message
+
+
+def test_extreme_coordinates_do_not_crash_the_utm_suggestion() -> None:
+    geometries = [
+        LineString([(0, 0), (0, 1e300)]),
+        Polygon([(0, 1), (1e300, 0), (-1e300, 1)]),
+    ]
+
+    result = assess_crs("EPSG:4326", geometries)
+
+    assert result.suggested_projected_crs is None
