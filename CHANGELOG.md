@@ -6,6 +6,32 @@ All notable changes to GeoQC are documented here. This project follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-30
+
+### Highlights
+
+- `geoqc fix` repairs safe geometry errors into a new file and flags overlaps
+  and gaps for your review. It never edits the source.
+- `geoqc check data.shp` works with no options. GeoQC picks a generic preset
+  from the layer geometry and prints which one it chose.
+- Generic line layers skip road-network checks, so rivers and contours no
+  longer get `ROAD-DEAD_END` findings. Use `--preset jalan` for roads.
+- Generic polygon layers flag slivers (under 1 m² or very thin) as warnings.
+- Indonesian presets ship inside the package: `bidang-tanah`, `kawasan-hutan`,
+  `konsesi-kawasan-hutan`, `batas-administrasi`, and `jalan`. Run `geoqc presets` to list them.
+- A dataset with no CRS now gets a hint with a suggested CRS, and checks that
+  need metres are skipped with a clear reason.
+- `geoqc check` writes its issue GeoPackage and HTML report to a
+  `geoqc_output` folder next to the input. `--no-output` turns this off.
+- `geoqc check` on a multi-layer GeoPackage checks every layer and reports
+  each one.
+- Check results now end with a verdict line such as
+  `FAIL: 2 errors, 1 warning (score 97/100)` and the three most common issue
+  codes.
+- `geoqc --help` lists five everyday commands: check, fix, audit,
+  repair-roads, presets. `batch`, `html-report`, `crs-scan`, `axis-order`, and
+  `datum-shift` still work and are documented under Advanced commands.
+
 ### Security
 
 - Locked dependencies moved to the lowest releases without known advisories:
@@ -196,5 +222,6 @@ All notable changes to GeoQC are documented here. This project follows
 - The optional API's interactive documentation can now be disabled in
   production via `GEOQC_ENVIRONMENT=production`.
 
-[Unreleased]: https://github.com/nandaisnanda/GeoQC/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nandaisnanda/GeoQC/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nandaisnanda/GeoQC/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nandaisnanda/GeoQC/releases/tag/v0.1.0

@@ -17,7 +17,7 @@ CLIENT = TestClient(app)
 def test_api_metadata() -> None:
     """The API application exposes stable package metadata."""
     assert app.title == "GeoQC API"
-    assert app.version == "0.1.0"
+    assert app.version == "0.2.0"
 
 
 def test_api_responses_include_security_headers() -> None:

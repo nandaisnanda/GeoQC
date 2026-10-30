@@ -30,6 +30,7 @@ from geoqc.infrastructure.gis.dataset_checks import (
 from geoqc.infrastructure.gis.dataset_export import _ResultExporter
 from geoqc.infrastructure.gis.dataset_scoring import _rebuild_result
 from geoqc.infrastructure.gis.dataset_values import _feature_attributes, _wkt
+from geoqc.infrastructure.gis.finding_builders import _sliver_issues
 from geoqc.infrastructure.gis.legacy import profile_from_legacy_arguments
 from geoqc.infrastructure.gis.profile_loading import _DEFAULT_PROFILE, _resolve_profile
 from geoqc.infrastructure.gis.quality_workflow import (
@@ -85,6 +86,8 @@ def audit_geodataframe(
         issues.extend(_geometry_type_issues(frame, dataset_name, profile))
         issues.extend(_attribute_issues(frame, dataset_name, profile.attribute_rules))
         issues.extend(_crs_issues(frame, dataset_name, profile))
+        if profile.name == "generic-polygon":
+            issues.extend(_sliver_issues(tuple(frame.geometry), dataset_name, crs))
         local_rules = tuple(
             rule
             for rule in profile.topology_rules

@@ -7,6 +7,31 @@ python -m pip install geoqc
 geoqc --help
 ```
 
+## Everyday commands
+
+`geoqc --help` lists five commands, in this order:
+
+| Command        | What it does                                                          |
+| -------------- | --------------------------------------------------------------------- |
+| `check`        | Check one dataset for errors and write an issue layer you can open in QGIS. |
+| `fix`          | Repair safe geometry errors into a new file; overlaps and gaps are only flagged. |
+| `audit`        | Check many files or folders for geometry, CRS and duplicate problems. |
+| `repair-roads` | Close small gaps and node intersections in a road layer, saved as a new file. |
+| `presets`      | List the built-in presets for `check --preset`.                       |
+
+## Advanced commands
+
+These five commands are hidden from `geoqc --help` to keep it short. They still
+run, with the same options and exit codes, and are described in the table below.
+
+| Command                                  | What it does                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------- |
+| `geoqc batch PATH...`                    | Audit many datasets and keep going when one file fails.             |
+| `geoqc html-report IN OUT`               | Audit a dataset and write a self-contained HTML report.             |
+| `geoqc crs-scan PATH...`                 | Compare the declared CRS of several datasets.                       |
+| `geoqc axis-order --bounds ...`          | Check whether longitude and latitude are swapped in a bounding box. |
+| `geoqc datum-shift SRC DST --bounds ...` | Estimate how far a datum change moves coordinates over an area.     |
+
 ## Current command surface
 
 | Command                       | Description                                      | Exit code |

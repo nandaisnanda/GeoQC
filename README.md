@@ -1,14 +1,14 @@
 # GeoQC
 
-[![PyPI](https://img.shields.io/pypi/v/geoqc.svg?color=brightgreen&cacheSeconds=300&v=0.1.0)](https://pypi.org/project/geoqc/)
-[![Python versions](https://img.shields.io/pypi/pyversions/geoqc.svg?color=brightgreen&cacheSeconds=300&v=0.1.0)](https://pypi.org/project/geoqc/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg?v=0.1.0)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/geoqc.svg?color=brightgreen&cacheSeconds=300&v=0.2.0)](https://pypi.org/project/geoqc/)
+[![Python versions](https://img.shields.io/pypi/pyversions/geoqc.svg?color=brightgreen&cacheSeconds=300&v=0.2.0)](https://pypi.org/project/geoqc/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg?v=0.2.0)](LICENSE)
 
 **GeoQC** is a typed Python toolkit for quality control of geospatial data. It
 detects common geometry defects and provides reusable building blocks for CRS,
 datum, axis-order, attribute, batch, and reporting workflows.
 
-> **Release status:** `0.1.0` (alpha). The top-level `validate_geometry()` API is
+> **Release status:** `0.2.0` (alpha). The top-level `validate_geometry()` API is
 > ready for evaluation. Advanced APIs may evolve before `1.0` and changes will
 > be documented in the changelog.
 
@@ -207,11 +207,21 @@ share an edge with kawasan hutan.
 
 ## Command-line interface
 
-The initial CLI exposes package information and a stable command surface:
+Check a dataset with no options. GeoQC picks a preset from the geometry type,
+writes an issue layer and an HTML report to `geoqc_output/`, and prints a
+verdict:
+
+```bash
+geoqc check data.shp
+geoqc fix data.shp fixed.gpkg
+```
+
+More commands:
 
 ```bash
 geoqc --help
 geoqc --version
+geoqc presets
 geoqc audit path/to/folder
 geoqc check parcels.gpkg --preset parcel --issues issues.gpkg --report report.html
 geoqc repair-roads roads.shp repaired.gpkg --snap-tolerance 0.1

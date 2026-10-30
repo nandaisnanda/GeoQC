@@ -2,15 +2,19 @@
 
 import json
 import warnings
+from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
+import click
 import geopandas as gpd  # type: ignore[import-untyped]
 import shapely
 import typer
 from pyogrio import list_layers, read_info  # type: ignore[import-untyped]
 from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
+from typer.core import TyperGroup
 
 from geoqc import (
     CheckStatus,
@@ -51,7 +55,21 @@ from geoqc.infrastructure.reporting import BenchmarkFormat, write_benchmark_repo
 from geoqc.interfaces.cli.delivery import app as delivery_app
 from geoqc.interfaces.cli.progress import ParallelConsoleProgress
 
+_COMMAND_ORDER = ("check", "fix", "audit", "repair-roads", "presets")
+_ADVANCED_COMMANDS = frozenset({"batch", "html-report", "crs-scan", "axis-order", "datum-shift"})
+
+
+class _OrderedGroup(TyperGroup):
+    """List the everyday commands first, in a fixed order."""
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        names = super().list_commands(ctx)
+        first = [name for name in _COMMAND_ORDER if name in names]
+        return first + [name for name in names if name not in first]
+
+
 app: typer.Typer = typer.Typer(
+    cls=_OrderedGroup,
     name="geoqc",
     help="GeoQC GIS quality-control toolkit.",
     invoke_without_command=True,
@@ -61,6 +79,13 @@ app: typer.Typer = typer.Typer(
 
 
 app.add_typer(delivery_app)
+# Advanced commands keep working but stay out of `geoqc --help`.
+for _command in delivery_app.registered_commands:
+    _name = _command.name or (
+        _command.callback.__name__.replace("_", "-") if _command.callback else ""
+    )
+    if _name in _ADVANCED_COMMANDS:
+        _command.hidden = True
 
 AUDIT_SUFFIXES = (".fgb", ".geojson", ".gpkg", ".parquet", ".shp")
 _SHAPEFILE_SIDECARS = frozenset(
@@ -158,6 +183,23 @@ def _echo_audit_item(label: str | Path, engine: str, audit_result: DatasetAuditR
     return quality_passed
 
 
+def _echo_verdict(result: DatasetAuditResult, passed: bool) -> None:
+    """Print why the check passed or failed, then the most frequent issue codes."""
+    counts = Counter(issue.severity for issue in result.issues)
+    parts = [
+        f"{counts[level]} {level.value}{'s' if counts[level] > 1 else ''}"
+        for level in (Severity.CRITICAL, Severity.ERROR, Severity.WARNING, Severity.INFO)
+        if counts[level]
+    ]
+    score = f"score {result.quality_score:.0f}/100"
+    if passed:
+        typer.echo(f"PASS ({score})")
+    else:
+        typer.echo(f"FAIL: {', '.join(parts) or 'quality gate not met'} ({score})")
+    for code, count in Counter(issue.code for issue in result.issues).most_common(3):
+        typer.echo(f"  {code} x{count}")
+
+
 def _gpkg_layers(source: Path) -> list[str]:
     """Return GeoPackage layer names, or an empty list for other inputs."""
     if source.suffix.casefold() != ".gpkg" or not source.is_file():
@@ -173,6 +215,10 @@ def _auto_profile(source: Path, layer: str | None) -> QualityProfile:
     )
     target = source.name if layer is None else f"{source.name}:{layer}"
     typer.echo(f"Preset: {profile.name} (geometry type {geometry_type or 'unknown'} in {target})")
+    if profile.name == "generic-line":
+        # Unknown lines may be rivers or contours: run geometry checks only.
+        typer.echo("Road network checks off; use --preset jalan for roads.")
+        profile = replace(profile, preset=None)
     return profile
 
 
@@ -237,7 +283,7 @@ def main(
         raise typer.Exit()
 
 
-@app.command()
+@app.command(short_help="Check many files or folders for geometry, CRS and duplicate problems.")
 def audit(
     inputs: Annotated[
         list[Path],
@@ -414,7 +460,7 @@ def audit(
         raise typer.Exit(code=1)
 
 
-@app.command("presets")
+@app.command("presets", short_help="List the built-in presets for check --preset.")
 def list_presets() -> None:
     """List the built-in presets for `geoqc check --preset`."""
     descriptions = {
@@ -426,7 +472,10 @@ def list_presets() -> None:
         typer.echo(f"{name.ljust(width)}  {description}")
 
 
-@app.command("check")
+@app.command(
+    "check",
+    short_help="Check one dataset for errors and write an issue layer you can open in QGIS.",
+)
 def check_dataset(
     source: Annotated[Path, typer.Argument(help="Input vector dataset.")],
     profile_path: Annotated[
@@ -530,6 +579,7 @@ def check_dataset(
                 f"score={layer_result.quality_score:.2f} "
                 f"status={'PASS' if layer_passed else 'FAIL'}"
             )
+            _echo_verdict(layer_result, layer_passed)
             for line in written:
                 typer.echo(line)
             if not layer_passed:
@@ -559,6 +609,7 @@ def check_dataset(
         f"issues={len(result.issues)} score={result.quality_score:.2f} "
         f"status={'PASS' if result.passes(policy) else 'FAIL'}"
     )
+    _echo_verdict(result, result.passes(policy))
     _echo_missing_crs(result)
     _echo_unmatched_rules(profile, result.dataset_name)
     for line in written:
@@ -567,7 +618,10 @@ def check_dataset(
         raise typer.Exit(code=1)
 
 
-@app.command("repair-roads")
+@app.command(
+    "repair-roads",
+    short_help="Close small gaps and node intersections in a road layer, saved as a new file.",
+)
 def repair_roads(
     source: Annotated[Path, typer.Argument(help="Input road vector dataset.")],
     output: Annotated[Path, typer.Argument(help="New output GeoPackage path.")],
@@ -646,7 +700,10 @@ _REVIEW_CONFIG = RepairConfig(gap_area_threshold=float("inf"))
 _REVIEW_ISSUES = (RepairIssueType.OVERLAP, RepairIssueType.GAP)
 
 
-@app.command("fix")
+@app.command(
+    "fix",
+    short_help="Repair safe geometry errors into a new file; overlaps and gaps are only flagged.",
+)
 def fix(
     source: Annotated[Path, typer.Argument(help="Input vector dataset; never modified.")],
     output: Annotated[Path, typer.Argument(help="New output GeoPackage path.")],

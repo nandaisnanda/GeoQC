@@ -9,7 +9,7 @@ import geoqc
 
 def test_package_exposes_version() -> None:
     """The installable package must expose its typed version metadata."""
-    assert geoqc.__version__ == "0.1.0"
+    assert geoqc.__version__ == "0.2.0"
 
 
 def test_package_exposes_geometry_validation_api() -> None:

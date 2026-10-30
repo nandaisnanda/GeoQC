@@ -151,7 +151,7 @@ def test_cli_shows_version() -> None:
     result = CliRunner().invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "GeoQC 0.1.0"
+    assert result.stdout.strip() == "GeoQC 0.2.0"
 
 
 def test_cli_rejects_unknown_options() -> None:

@@ -1,5 +1,6 @@
 """Shapely-backed builders for canonical dataset findings."""
 
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
@@ -328,6 +329,52 @@ def _minimum_area_issues(
         )
         for index, geometry in flagged
     ]
+
+
+def _sliver_issues(
+    items: Sequence[BaseGeometry],
+    layer: str,
+    crs: str | None,
+    minimum_area: float = 1.0,
+    compactness: float = 0.05,
+) -> list[DatasetIssue]:
+    """Flag polygons under ``minimum_area`` m² or thinner than ``compactness`` (4πA/P²)."""
+    units = _area_units(items, crs)
+    if units.unit != "m²":
+        # No metric CRS and no UTM zone: areas would be meaningless.
+        return []
+    findings = []
+    for index, geometry in enumerate(items):
+        if geometry.is_empty or not _is_valid(geometry) or geometry.geom_type not in _POLYGONAL:
+            continue
+        measured = units.project(geometry) if units.project is not None else geometry
+        area, perimeter = measured.area, measured.length
+        thin = perimeter > 0 and 4 * math.pi * area / perimeter**2 < compactness
+        if area >= minimum_area and not thin:
+            continue
+        findings.append(
+            _issue(
+                code="TOP-SLIVER",
+                issue_type="sliver_polygon",
+                title="Sliver polygon",
+                message=(
+                    f"Feature {index} is a sliver: area {area:.6g} m², "
+                    f"perimeter {perimeter:.6g} m{units.note}."
+                ),
+                severity=Severity.WARNING,
+                category="topology",
+                recommendation="Review whether the feature is a sliver or a valid small object.",
+                risk=RepairRisk.REVIEW,
+                geometry=geometry,
+                layer=layer,
+                feature_index=index,
+                metadata={"area": float(area), "perimeter": float(perimeter)},
+            )
+        )
+    return findings
+
+
+_POLYGONAL = frozenset({"Polygon", "MultiPolygon"})
 
 
 def _road_issues(items: Sequence[BaseGeometry], layer: str, tolerance: float) -> list[DatasetIssue]:
