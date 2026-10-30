@@ -1,5 +1,6 @@
 """Application service that audits CRS consistency across datasets."""
 
+import re
 from collections.abc import Iterable
 
 from geoqc.application.ports import CrsMetadataReader
@@ -11,6 +12,9 @@ from geoqc.domain.models import (
     DatasetCrsMetadata,
     DatasetSource,
 )
+
+_INDONESIAN_CRS_NAME = re.compile(r"^(SRGI2013|DGN95)|^WGS 84 / UTM zone (4[6-9]|5[0-4])S$")
+_WKT_NAME = re.compile(r'^[A-Z0-9_]+\[\s*"([^"]+)"')
 
 
 class CrsConsistencyScanner:
@@ -60,7 +64,11 @@ class CrsConsistencyScanner:
             return DatasetCrsAudit(
                 source=item.source,
                 status=CrsAuditStatus.MISSING,
-                message="Dataset does not declare a CRS.",
+                message=(
+                    "Dataset does not declare a CRS. For Indonesian data check SRGI2013, "
+                    "DGN95, WGS 84 / UTM zone 46S-54S or DGN95 / Indonesia TM-3; the "
+                    "audit suggests one from the coordinates. No CRS was assigned."
+                ),
             )
         if baseline is None or baseline.crs is None:
             return DatasetCrsAudit(
@@ -74,10 +82,19 @@ class CrsConsistencyScanner:
             if item.crs.canonical_wkt == baseline.crs.canonical_wkt
             else CrsAuditStatus.MISMATCH
         )
-        message = None
+        message = _indonesian_label(item.crs.canonical_wkt)
         if status is CrsAuditStatus.MISMATCH:
             message = (
                 f"CRS {item.crs.display_name!r} differs from baseline "
-                f"{baseline.crs.display_name!r}."
+                f"{baseline.crs.display_name!r}.{message}"
             )
-        return DatasetCrsAudit(source=item.source, status=status, crs=item.crs, message=message)
+        return DatasetCrsAudit(
+            source=item.source, status=status, crs=item.crs, message=message or None
+        )
+
+
+def _indonesian_label(canonical_wkt: str) -> str:
+    match = _WKT_NAME.match(canonical_wkt.strip())
+    if match is None or not _INDONESIAN_CRS_NAME.search(match.group(1)):
+        return ""
+    return f" Recognized Indonesian CRS: {match.group(1)}."

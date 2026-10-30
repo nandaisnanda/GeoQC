@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
+import geopandas as gpd  # type: ignore[import-untyped]
+import shapely
 import typer
 from pyogrio import list_layers, read_info  # type: ignore[import-untyped]
 from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
@@ -15,8 +17,11 @@ from geoqc import (
     QualityGatePolicy,
     QualityPreset,
     QualityProfile,
+    RepairConfig,
+    RepairIssueType,
     __version__,
     load_quality_profile,
+    repair_geometries,
     write_audit_report,
     write_issue_layers,
 )
@@ -27,7 +32,7 @@ from geoqc.application.benchmarking import BenchmarkReport
 from geoqc.application.parallel import ParallelBatchExecutor
 from geoqc.application.parallel.scheduler import TaskScheduler
 from geoqc.application.services import BatchProcessor
-from geoqc.domain.models import DatasetAuditResult
+from geoqc.domain.models import DatasetAuditResult, RepairStatus
 from geoqc.domain.models.spatial_intelligence import RoadNetworkRepairConfig
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.parallel_audit import (
@@ -552,6 +557,96 @@ def repair_roads(
     typer.echo(f"Output: {result.output} layer={result.output_layer}")
     if report is not None:
         typer.echo(f"Report: {report.resolve()}")
+
+
+# Shape-preserving fixes only; overlaps and gaps change shared boundaries.
+_SAFE_FIX_CONFIG = RepairConfig(resolve_overlaps=False, fill_gaps=False)
+# Preview-only pass: detects every overlap and enclosed gap without applying it.
+_REVIEW_CONFIG = RepairConfig(gap_area_threshold=float("inf"))
+_REVIEW_ISSUES = (RepairIssueType.OVERLAP, RepairIssueType.GAP)
+
+
+@app.command("fix")
+def fix(
+    source: Annotated[Path, typer.Argument(help="Input vector dataset; never modified.")],
+    output: Annotated[Path, typer.Argument(help="New output GeoPackage path.")],
+    layer: Annotated[
+        str | None,
+        typer.Option(help="Input layer name; required for multi-layer datasets."),
+    ] = None,
+    overwrite: Annotated[
+        bool,
+        typer.Option("--overwrite", help="Replace an existing output GeoPackage."),
+    ] = False,
+) -> None:
+    """Apply safe geometry fixes and flag overlaps and gaps for review."""
+    try:
+        if output.suffix.lower() != ".gpkg":
+            raise ValueError("Output must be a .gpkg file.")
+        if output.resolve() == source.resolve():
+            raise ValueError("Output path must differ from the input path.")
+        if output.exists() and not overwrite:
+            raise FileExistsError(f"Output exists: {output}. Pass --overwrite to replace it.")
+        if not source.exists():
+            raise FileNotFoundError(f"Input not found: {source}")
+        if layer is None:
+            layers = list_layers(source)
+            if len(layers) > 1:
+                names = ", ".join(str(row[0]) for row in layers)
+                raise ValueError(f"Input has multiple layers ({names}); pass --layer.")
+        frame = gpd.read_file(source, layer=layer)
+        positions = [
+            index
+            for index, geometry in enumerate(frame.geometry)
+            if geometry is not None and not geometry.is_empty
+        ]
+        geometries = [frame.geometry.iloc[index] for index in positions]
+        safe = repair_geometries(geometries, _SAFE_FIX_CONFIG)
+        safe_geometries = [shapely.from_wkt(wkt) for wkt in safe.after_wkt]
+        preview = repair_geometries(safe_geometries, _REVIEW_CONFIG)
+
+        reasons: list[set[str]] = [set() for _ in geometries]
+        for item in safe.report.results:
+            if item.result.status is RepairStatus.FAILED:
+                reasons[item.feature_index].add("repair_failed")
+        for item in preview.report.results:
+            for action in item.result.actions:
+                if action.issue_type in _REVIEW_ISSUES:
+                    reasons[item.feature_index].add(str(action.issue_type.value))
+
+        output_geometries = list(frame.geometry)
+        review_column: list[str | None] = [None] * len(frame)
+        for offset, index in enumerate(positions):
+            output_geometries[index] = safe_geometries[offset]
+            if reasons[offset]:
+                review_column[index] = ",".join(sorted(reasons[offset]))
+        fixed = frame.set_geometry(
+            gpd.GeoSeries(output_geometries, index=frame.index, crs=frame.crs)
+        )
+        fixed["geoqc_review"] = review_column
+
+        output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = output.with_name(f".{output.stem}.{uuid4().hex}.gpkg")
+        try:
+            fixed.to_file(temporary, layer=layer or source.stem, driver="GPKG")
+            temporary.replace(output)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+    except (
+        DataSourceError,
+        FileExistsError,
+        FileNotFoundError,
+        OSError,
+        TypeError,
+        ValueError,
+    ) as error:
+        typer.echo(f"Error: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    needs_review = sum(1 for item in reasons if item)
+    typer.echo(f"Fixed {safe.report.repaired_count}, needs review {needs_review}")
+    typer.echo(f"Output: {output.resolve()} layer={layer or source.stem}")
 
 
 def _write_json_report(path: Path, payload: dict[str, object], *, protected: set[Path]) -> None:

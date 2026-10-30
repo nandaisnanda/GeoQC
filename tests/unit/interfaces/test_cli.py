@@ -1,7 +1,9 @@
 """Tests for the Typer composition root."""
 
+import hashlib
 import json
 import pickle
+import shutil
 from pathlib import Path
 
 import geopandas as gpd  # type: ignore[import-untyped]
@@ -28,6 +30,7 @@ from geoqc.infrastructure.gis.road_dataset_repair import (
 from geoqc.interfaces.cli.main import app
 
 runner = CliRunner()
+SAMPLE_DEFECTS = Path(__file__).parents[3] / "examples" / "sample_defects.gpkg"
 
 
 def test_audit_folder_reports_dataset_results(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
@@ -199,3 +202,45 @@ def test_repair_roads_command_reports_safe_error(monkeypatch: MonkeyPatch, tmp_p
 
     assert result.exit_code == 2
     assert "Error: bad road data" in result.stderr
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_fix_command_repairs_self_intersection_without_touching_input(tmp_path: Path) -> None:
+    source = tmp_path / "sample_defects.gpkg"
+    shutil.copyfile(SAMPLE_DEFECTS, source)
+    output = tmp_path / "fixed.gpkg"
+    before = _sha256(source)
+    assert not gpd.read_file(source, layer="parcels").is_valid.all()
+
+    result = runner.invoke(app, ["fix", str(source), str(output), "--layer", "parcels"])
+
+    assert result.exit_code == 0, result.output
+    assert "Fixed 1, needs review 1" in result.stdout
+    assert _sha256(source) == before
+    fixed = gpd.read_file(output, layer="parcels")
+    assert fixed.is_valid.all()
+    assert fixed["geoqc_review"].tolist().count("overlap") == 1
+
+
+def test_fix_command_refuses_to_overwrite_input(tmp_path: Path) -> None:
+    source = tmp_path / "sample_defects.gpkg"
+    shutil.copyfile(SAMPLE_DEFECTS, source)
+    before = _sha256(source)
+
+    result = runner.invoke(
+        app, ["fix", str(source), str(source), "--layer", "parcels", "--overwrite"]
+    )
+
+    assert result.exit_code == 2
+    assert "must differ from the input" in result.stderr
+    assert _sha256(source) == before
+
+
+def test_fix_command_requires_layer_for_multi_layer_input(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["fix", str(SAMPLE_DEFECTS), str(tmp_path / "fixed.gpkg")])
+
+    assert result.exit_code == 2
+    assert "pass --layer" in result.stderr

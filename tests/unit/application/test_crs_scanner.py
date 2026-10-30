@@ -105,3 +105,27 @@ def test_scanner_reports_missing_when_no_dataset_declares_crs() -> None:
     assert result.baseline is None
     assert result.datasets[0].status is CrsAuditStatus.MISSING
     assert result.is_consistent is False
+
+
+def test_scanner_names_indonesian_crs_from_canonical_wkt() -> None:
+    utm49s = CrsMetadata('PROJCRS["WGS 84 / UTM zone 49S",BASEGEOGCRS[]]', "EPSG:32749")
+    sources = [DatasetSource("a.gpkg"), DatasetSource("b.gpkg")]
+    scanner = CrsConsistencyScanner(FakeReader({"a.gpkg": WGS84, "b.gpkg": utm49s}))
+
+    result = scanner.scan(sources)
+
+    mismatch = result.datasets[1]
+    assert mismatch.status is CrsAuditStatus.MISMATCH
+    assert "Recognized Indonesian CRS: WGS 84 / UTM zone 49S" in (mismatch.message or "")
+    assert result.datasets[0].message is None
+
+
+def test_scanner_missing_crs_lists_indonesian_candidates_without_assigning() -> None:
+    source = DatasetSource("no_prj.shp")
+    result = CrsConsistencyScanner(FakeReader({source.identifier: None})).scan([source])
+
+    missing = result.datasets[0]
+    assert missing.status is CrsAuditStatus.MISSING
+    assert missing.crs is None
+    assert "SRGI2013" in (missing.message or "")
+    assert "TM-3" in (missing.message or "")
