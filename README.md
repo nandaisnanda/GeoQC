@@ -4,30 +4,35 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/geoqc.svg?color=brightgreen&cacheSeconds=300&v=0.2.0)](https://pypi.org/project/geoqc/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg?v=0.2.0)](LICENSE)
 
-**GeoQC** is a typed Python toolkit for quality control of geospatial data. It
-detects common geometry defects and provides reusable building blocks for CRS,
-datum, axis-order, attribute, batch, and reporting workflows.
+**GeoQC** finds and fixes errors in vector GIS data in one command. Results open
+in QGIS. Built for Indonesian data.
 
-> **Release status:** `0.2.0` (alpha). The top-level `validate_geometry()` API is
-> ready for evaluation. Advanced APIs may evolve before `1.0` and changes will
-> be documented in the changelog.
+```bash
+pip install geoqc
+```
 
-## Two ways to use GeoQC
+`geoqc check` audits a layer and prints a verdict:
 
-GeoQC exposes one validation engine through several surfaces, so results are
-identical no matter how you call it:
+```console
+$ geoqc check examples/sample_defects.gpkg --layer parcels --no-output
+Preset: generic-polygon (geometry type Polygon in sample_defects.gpkg:parcels)
+FAIL: 2 errors, 1 warning
+4 of 4 features have errors (100.0%)
+  GEO-SELF_INTERSECTION x1
+  TOP-SLIVER x1
+  TOP-NO-OVERLAP x1
+```
 
-1. **Developers** install the package (`pip install geoqc`) and use the
-   [Python API](#quick-start) or the [`geoqc` CLI](docs/cli.md).
-2. **Everyone else** runs the bundled web app (`apps/web`) in a browser. It
-   uploads datasets to the FastAPI backend, which validates them with the
-   **same `geoqc` engine** — no validation logic is reimplemented in
-   JavaScript. See [API and deployment](docs/api.md) to run the backend and
-   client locally.
+`geoqc fix` writes repairs to a new GeoPackage and flags what needs a human:
 
-Because the web API, CLI, and Python API all call
-`ShapelyGeometryValidator` through the same audit engine, the Website, CLI, and
-library always agree on what is valid. See [Architecture](docs/architecture.md).
+```console
+$ geoqc fix examples/sample_defects.gpkg fixed.gpkg
+layer=parcels Fixed 1, needs review 1
+layer=roads Fixed 0, needs review 0
+```
+
+`geoqc presets` lists the built-in Indonesian presets (`batas-administrasi`,
+`bidang-tanah`, `jalan`, `kawasan-hutan`, ...) for `geoqc check --preset`.
 
 ## Features
 
@@ -60,6 +65,27 @@ library always agree on what is valid. See [Architecture](docs/architecture.md).
 GeoQC can return repaired geometries or write a new output dataset, but it
 never silently modifies a source dataset. Ambiguous repairs are marked for
 review and retain before/after geometry plus change metrics.
+
+## Two ways to use GeoQC
+
+GeoQC exposes one validation engine through several surfaces, so results are
+identical no matter how you call it:
+
+1. **Developers** install the package (`pip install geoqc`) and use the
+   [Python API](#quick-start) or the [`geoqc` CLI](docs/cli.md).
+2. **Everyone else** runs the bundled web app (`apps/web`) in a browser. It
+   uploads datasets to the FastAPI backend, which validates them with the
+   **same `geoqc` engine** — no validation logic is reimplemented in
+   JavaScript. See [API and deployment](docs/api.md) to run the backend and
+   client locally.
+
+Because the web API, CLI, and Python API all call
+`ShapelyGeometryValidator` through the same audit engine, the Website, CLI, and
+library always agree on what is valid. See [Architecture](docs/architecture.md).
+
+> **Release status:** `0.2.0` (alpha). The top-level `validate_geometry()` API is
+> ready for evaluation. Advanced APIs may evolve before `1.0` and changes will
+> be documented in the changelog.
 
 ## Requirements
 

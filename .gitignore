@@ -36,3 +36,8 @@ coverage-audit.json
 .geoqc-osm-test/
 .pytest-tmp/
 artifacts/
+
+# Real-data validation tooling (tools/validation)
+tools/validation/data/
+tools/validation/out/
+tools/qgis_spike/geoqc_spike.zip
