@@ -6,6 +6,22 @@ All notable changes to GeoQC are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- `geoqc fix` flags self-intersecting or non-simple lines as `self_intersection`
+  for review and leaves their geometry unchanged.
+- `geoqc fix` without `--layer` now fixes every layer of a multi-layer input
+  into the same GeoPackage and prints one line per layer.
+- `geoqc fix` writes a `geoqc_fix_log` layer with one row per touched or
+  flagged feature: actions, area before and after, area change, and max shift.
+- Road checks report each unconnected endpoint once. `ROAD-DEAD_END` and
+  `TOP-NO-DANGLES` on the same endpoint merge into one finding that keeps both
+  rule ids in `rule_codes`.
+- A road end with no other road within the preset's overshoot/undershoot
+  tolerance is now info, not a warning. Info findings no longer count in
+  "features with errors" and do not fail the quality gate.
+- The CI workflow now runs on Ubuntu and Windows (Python 3.12 and 3.13).
+
 ## [0.2.0] - 2026-10-30
 
 ### Highlights

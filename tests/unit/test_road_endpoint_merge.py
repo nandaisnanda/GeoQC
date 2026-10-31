@@ -57,3 +57,16 @@ def test_road_ends_do_not_count_as_errors_in_cli(tmp_path: Path) -> None:
 
     # Three stubs plus the one road they undershoot; the 6 road ends are info only.
     assert "4 of 18 features have errors" in result.stdout, result.stdout
+
+
+def test_road_ends_alone_pass_the_quality_gate() -> None:
+    network = _network()
+    only_ends = gpd.GeoDataFrame(
+        geometry=[*network.geometry[:12], *network.geometry[15:17]], crs=network.crs
+    )
+    profile = load_builtin_preset("jalan")
+
+    result = audit_geodataframe(only_ends, dataset_name="jalan", profile=profile)
+
+    assert {issue.severity for issue in result.issues} == {Severity.INFO}
+    assert result.passes(profile.gate)
