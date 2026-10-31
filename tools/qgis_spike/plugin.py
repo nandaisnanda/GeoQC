@@ -27,13 +27,23 @@ def _venv_python(venv: Path) -> Path:
     return venv / sub
 
 
+def _is_py312(python: str) -> bool:
+    check = "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)"
+    try:
+        return _run([python, "-c", check], timeout=30).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def _base_python() -> str:
     """Interpreter for `python -m venv`. On Windows sys.executable is qgis-bin.exe."""
-    for name in ("python3", "python"):
-        found = shutil.which(name)
-        if found:
+    candidates = [shutil.which(name) for name in ("python3", "python")]
+    if Path(sys.executable).name.lower().startswith("python"):
+        candidates.append(sys.executable)
+    for found in candidates:
+        if found and "WindowsApps" not in found and _is_py312(found):
             return found
-    return sys.executable
+    raise RuntimeError("Python 3.12+ not found. Install uv or Python 3.12.")
 
 
 def ensure_venv() -> Path:
@@ -44,7 +54,7 @@ def ensure_venv() -> Path:
     venv.parent.mkdir(parents=True, exist_ok=True)
     uv = shutil.which("uv")
     if uv:
-        result = _run([uv, "venv", str(venv)])
+        result = _run([uv, "venv", "--python", "3.12", str(venv)])
         if result.returncode == 0 and python.exists():
             return python
     result = _run([_base_python(), "-m", "venv", str(venv)])
