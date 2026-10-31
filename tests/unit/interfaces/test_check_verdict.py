@@ -1,4 +1,4 @@
-"""`geoqc check` explains PASS and FAIL: severity counts, score, top issue codes."""
+"""`geoqc check` explains PASS and FAIL: severity counts and top issue codes."""
 
 import re
 from pathlib import Path
@@ -19,8 +19,10 @@ def test_fail_verdict_lists_severities_score_and_top_codes() -> None:
 
     lines = result.stdout.splitlines()
     verdict = next(line for line in lines if line.startswith("FAIL:"))
-    assert re.fullmatch(r"FAIL: 2 errors, 1 warning \(score \d+/100\)", verdict)
-    codes = lines[lines.index(verdict) + 1 :]
+    assert verdict == "FAIL: 2 errors, 1 warning"
+    codes = [
+        line for line in lines[lines.index(verdict) + 1 :] if re.fullmatch(r"  \S+ x\d+", line)
+    ]
     assert codes[0].startswith("  ") and re.fullmatch(r"  [A-Z]+-[A-Z_]+ x\d+", codes[0])
     assert len([line for line in codes if re.fullmatch(r"  \S+ x\d+", line)]) == 3
 
@@ -31,5 +33,6 @@ def test_pass_verdict_has_score_only(tmp_path: Path) -> None:
 
     result = CliRunner().invoke(app, ["check", str(source), "--no-output"])
 
-    assert "PASS (score 100/100)" in result.stdout
+    assert "PASS" in result.stdout.splitlines()
+    assert "/100" not in result.stdout
     assert "FAIL" not in result.stdout

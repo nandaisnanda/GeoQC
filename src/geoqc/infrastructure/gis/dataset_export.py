@@ -1,6 +1,7 @@
 """Dataset export for the canonical dataset workflow."""
 
 import json
+import warnings
 from pathlib import Path
 from uuid import uuid4
 
@@ -48,14 +49,18 @@ def write_issue_layers(
             frame = issues_to_geodataframe(result, kind)
             if frame.empty:
                 continue
-            frame.to_file(temporary, layer=f"geoqc_errors_{kind.value}", driver="GPKG")
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*'crs' was not provided.*")
+                frame.to_file(temporary, layer=f"geoqc_errors_{kind.value}", driver="GPKG")
             wrote = True
         if not wrote:
             empty = gpd.GeoDataFrame(
                 {"status": pd.Series(dtype="str")},
                 geometry=gpd.GeoSeries([], dtype="geometry", crs=result.crs_guard.crs),
             )
-            empty.to_file(temporary, layer="geoqc_errors_point", driver="GPKG")
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", message=".*'crs' was not provided.*")
+                empty.to_file(temporary, layer="geoqc_errors_point", driver="GPKG")
         temporary.replace(path)
     finally:
         if temporary.exists():

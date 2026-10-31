@@ -62,7 +62,7 @@ def test_check_without_preset_prints_the_chosen_preset(
 
     assert result.exit_code == 0, result.output
     assert expected in result.stdout
-    assert "status=PASS" in result.stdout
+    assert "PASS" in result.stdout
 
 
 def test_check_without_preset_picks_per_layer_in_a_geopackage(tmp_path: Path) -> None:

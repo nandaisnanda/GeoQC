@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 
 from geoqc.domain.models import CategoryScore, DatasetIssue, ScoreDeduction, ScoringPolicy
+from geoqc.domain.rules import Severity
 
 
 def score_issues(
@@ -62,4 +63,9 @@ def score_issues(
         )
         / weight_total
     )
-    return tuple(scores), tuple(deductions), round(overall, 2)
+    overall = round(overall, 1)
+    if overall >= 100.0 and any(
+        item.severity in {Severity.CRITICAL, Severity.ERROR} for item in issues
+    ):
+        overall = 99.9
+    return tuple(scores), tuple(deductions), overall

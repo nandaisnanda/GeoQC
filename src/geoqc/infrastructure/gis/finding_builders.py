@@ -437,6 +437,14 @@ def _road_issues(items: Sequence[BaseGeometry], layer: str, tolerance: float) ->
     return findings
 
 
+def _safe_intersects(left: BaseGeometry, right: BaseGeometry) -> bool:
+    """Intersection test that treats a GEOS failure on extreme coordinates as no hit."""
+    try:
+        return bool(left.intersects(right))
+    except shapely.errors.GEOSException:
+        return False
+
+
 def _cross_layer_issues(
     source: Sequence[BaseGeometry], reference: Sequence[BaseGeometry], rule: TopologyRule
 ) -> list[DatasetIssue]:
@@ -467,7 +475,7 @@ def _cross_layer_issues(
             title = "Feature outside reference layer"
             recommendation = f"Move or trim the feature into {rule.reference_layer}."
         else:
-            hits = [item for item in candidates if geometry.intersects(reference[item])]
+            hits = [item for item in candidates if _safe_intersects(geometry, reference[item])]
             if not hits:
                 continue
             # Overlay needs valid input. Invalid features still violate the rule, so

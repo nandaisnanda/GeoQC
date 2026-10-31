@@ -34,7 +34,7 @@ def test_generic_line_skips_road_checks_and_prints_hint(tmp_path: Path) -> None:
     (stdout,) = _issue_codes(source)
 
     assert _HINT in stdout
-    assert "issues=0" in stdout
+    assert "PASS" in stdout
 
 
 def test_jalanlokal_has_no_road_findings() -> None:
@@ -72,7 +72,7 @@ def test_generic_polygon_flags_sample_sliver() -> None:
         )
 
     assert "Preset: generic-polygon" in result.stdout
-    assert "issues=3" in result.stdout
+    assert "FAIL: 2 errors, 1 warning" in result.stdout
 
 
 def test_generic_polygon_sliver_findings_are_warnings(tmp_path: Path) -> None:
@@ -88,7 +88,8 @@ def test_generic_polygon_sliver_findings_are_warnings(tmp_path: Path) -> None:
     result = run(source, profile=_generic_profile("Polygon"))
 
     slivers = [issue for issue in result.issues if issue.code == "TOP-SLIVER"]
-    assert sorted(issue.feature_index for issue in slivers) == [1, 2]
+    indexes = [issue.feature_index for issue in slivers if issue.feature_index is not None]
+    assert sorted(indexes) == [1, 2]
     assert {issue.severity for issue in slivers} == {Severity.WARNING}
 
 

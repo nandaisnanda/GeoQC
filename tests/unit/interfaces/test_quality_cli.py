@@ -37,7 +37,7 @@ def test_check_command_writes_outputs_and_returns_gate_failure(tmp_path: Path) -
         )
 
     assert result.exit_code == 1
-    assert "status=FAIL" in result.stdout
+    assert "FAIL" in result.stdout
     assert issues.exists()
     assert json.loads(report.read_text(encoding="utf-8"))["schema_version"] == "1.0"
 
@@ -63,7 +63,7 @@ quality_gate:
         result = CliRunner().invoke(app, ["check", str(source), "--profile", str(profile)])
 
     assert result.exit_code == 0
-    assert "status=PASS" in result.stdout
+    assert "PASS" in result.stdout
 
 
 def _write_two_layer_gpkg(source: Path) -> None:
@@ -83,11 +83,11 @@ def test_check_command_reports_every_layer_with_worst_exit_code(tmp_path: Path) 
         )
 
     assert result.exit_code == 1
-    assert "layer=clean" in result.stdout
-    assert "layer=duplicates" in result.stdout
-    assert result.stdout.count("QC complete:") == 2
-    assert "status=PASS" in result.stdout
-    assert "status=FAIL" in result.stdout
+    assert "Layer: clean" in result.stdout
+    assert "Layer: duplicates" in result.stdout
+    assert "QC complete" not in result.stdout
+    assert result.stdout.count("PASS") == 1
+    assert result.stdout.count("FAIL") == 1
 
 
 def test_check_command_keeps_single_layer_option(tmp_path: Path) -> None:
@@ -101,8 +101,9 @@ def test_check_command_keeps_single_layer_option(tmp_path: Path) -> None:
         )
 
     assert result.exit_code == 0
-    assert result.stdout.count("QC complete:") == 1
-    assert "layer=" not in result.stdout
+    assert "QC complete" not in result.stdout
+    assert "Layer:" not in result.stdout
+    assert result.stdout.count("PASS") == 1
 
 
 def test_check_command_requires_layer_for_multi_layer_outputs(tmp_path: Path) -> None:

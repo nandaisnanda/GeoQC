@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
-import click
 import geopandas as gpd  # type: ignore[import-untyped]
 import shapely
 import typer
 from pyogrio import list_layers, read_info  # type: ignore[import-untyped]
 from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
+from typer import _click
 from typer.core import TyperGroup
 
 from geoqc import (
@@ -62,7 +62,7 @@ _ADVANCED_COMMANDS = frozenset({"batch", "html-report", "crs-scan", "axis-order"
 class _OrderedGroup(TyperGroup):
     """List the everyday commands first, in a fixed order."""
 
-    def list_commands(self, ctx: click.Context) -> list[str]:
+    def list_commands(self, ctx: _click.Context) -> list[str]:
         names = super().list_commands(ctx)
         first = [name for name in _COMMAND_ORDER if name in names]
         return first + [name for name in names if name not in first]
@@ -148,7 +148,8 @@ def _skipped_files(inputs: list[Path], sources: tuple[Path, ...], recursive: boo
 def _echo_missing_crs(result: DatasetAuditResult) -> None:
     for issue in result.issues:
         if issue.code == "META-MISSING_CRS":
-            typer.echo(f"CRS: missing. {issue.message.removeprefix(MISSING_CRS_MESSAGE)}".strip())
+            detail = issue.message.removeprefix(MISSING_CRS_MESSAGE).strip()
+            typer.echo(f"CRS: missing. {detail}".strip())
             return
 
 
@@ -191,11 +192,35 @@ def _echo_verdict(result: DatasetAuditResult, passed: bool) -> None:
         for level in (Severity.CRITICAL, Severity.ERROR, Severity.WARNING, Severity.INFO)
         if counts[level]
     ]
-    score = f"score {result.quality_score:.0f}/100"
     if passed:
-        typer.echo(f"PASS ({score})")
+        typer.echo("PASS")
     else:
-        typer.echo(f"FAIL: {', '.join(parts) or 'quality gate not met'} ({score})")
+        typer.echo(f"FAIL: {', '.join(parts) or 'quality gate not met'}")
+    affected = {
+        index
+        for issue in result.issues
+        for index in (
+            *issue.feature_indices,
+            issue.feature_index,
+            issue.related_feature_index,
+        )
+        if index is not None
+    }
+    if affected:
+        total = result.feature_count
+        percent = 100 * len(affected) / total if total else 0.0
+        typer.echo(f"{len(affected)} of {total} features have errors ({percent:.1f}%)")
+    dataset_issues = [
+        issue
+        for issue in result.issues
+        if not issue.feature_indices
+        and issue.feature_index is None
+        and issue.related_feature_index is None
+    ]
+    if dataset_issues:
+        typer.echo("Dataset-level:")
+        for issue in dataset_issues:
+            typer.echo(f"  {issue.code}: {issue.title}")
     for code, count in Counter(issue.code for issue in result.issues).most_common(3):
         typer.echo(f"  {code} x{count}")
 
@@ -234,7 +259,26 @@ def _preset_profile(name: str) -> QualityProfile:
     return QualityProfile(name=f"{generic.value}-cli", preset=generic, require_crs=False)
 
 
-_REPORT_HINT = 'HTML report skipped: install the report extra with pip install "geoqc[report]".'
+def _bind_preset_layer(profile: QualityProfile, preset: str, layer_name: str) -> QualityProfile:
+    """Point a single-layer preset's topology rules at the audited layer."""
+    names = {rule.layer for rule in profile.topology_rules}
+    names |= {rule.reference_layer for rule in profile.topology_rules if rule.reference_layer}
+    if len(names) != 1 or layer_name in names:
+        return profile
+    (old,) = names
+    rules = tuple(
+        replace(
+            rule,
+            layer=layer_name,
+            reference_layer=layer_name if rule.reference_layer == old else rule.reference_layer,
+        )
+        for rule in profile.topology_rules
+    )
+    typer.echo(f"Preset {preset} applied to layer {layer_name}")
+    return replace(profile, topology_rules=rules)
+
+
+_REPORT_HINT ='HTML report skipped: install the report extra with pip install "geoqc[report]".'
 
 
 def _default_output(source: Path, layer: str | None, suffix: str) -> Path:
@@ -463,13 +507,29 @@ def audit(
 @app.command("presets", short_help="List the built-in presets for check --preset.")
 def list_presets() -> None:
     """List the built-in presets for `geoqc check --preset`."""
-    descriptions = {
-        **list_builtin_presets(),
-        **{item.value: "Generic preset by geometry type." for item in QualityPreset},
+    general = {
+        QualityPreset.PARCEL.value: "Land parcels: polygon validity, overlaps and gaps.",
+        QualityPreset.ROAD.value: "Road lines: line types and network connectivity problems.",
+        QualityPreset.ADMIN_BOUNDARY.value: "Admin boundaries: polygon validity, overlaps, gaps.",
+        QualityPreset.POINT_SURVEY.value: "Survey points: point validity and duplicates.",
     }
-    width = max(len(name) for name in descriptions)
-    for name, description in descriptions.items():
-        typer.echo(f"{name.ljust(width)}  {description}")
+    automatic = {
+        "generic-polygon": "Polygon layers, parcel rules without CRS requirement.",
+        "generic-line": "Line layers, road rules without CRS requirement.",
+        "generic-point": "Point layers, survey rules without CRS requirement.",
+    }
+    groups = (
+        ("Indonesian presets", list_builtin_presets()),
+        ("General presets", general),
+        ("Automatic (used when no preset is given)", automatic),
+    )
+    width = max(len(name) for _, group in groups for name in group)
+    for index, (heading, group) in enumerate(groups):
+        if index:
+            typer.echo("")
+        typer.echo(f"{heading}:")
+        for name, description in group.items():
+            typer.echo(f"  {name.ljust(width)}  {description}")
 
 
 @app.command(
@@ -531,6 +591,9 @@ def check_dataset(
         elif preset is not None:
             profile = _preset_profile(preset)
         layers = _gpkg_layers(source) if layer is None else []
+        if preset is not None and profile is not None and len(layers) <= 1:
+            target = layer or (layers[0] if layers else source.stem)
+            profile = _bind_preset_layer(profile, preset, target)
         if profile is None and len(layers) <= 1:
             profile = _auto_profile(source, layer)
     except (DataSourceError, FileNotFoundError, OSError, TypeError, ValueError) as error:
@@ -573,12 +636,7 @@ def check_dataset(
                 continue
             layer_passed = layer_result.passes(policy)
             _echo_unmatched_rules(layer_profile, name)
-            typer.echo(
-                f"QC complete: dataset={source.name} layer={name} "
-                f"features={layer_result.feature_count} issues={len(layer_result.issues)} "
-                f"score={layer_result.quality_score:.2f} "
-                f"status={'PASS' if layer_passed else 'FAIL'}"
-            )
+            typer.echo(f"Layer: {name}")
             _echo_verdict(layer_result, layer_passed)
             for line in written:
                 typer.echo(line)
@@ -604,11 +662,6 @@ def check_dataset(
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
 
-    typer.echo(
-        f"QC complete: dataset={result.dataset_name} features={result.feature_count} "
-        f"issues={len(result.issues)} score={result.quality_score:.2f} "
-        f"status={'PASS' if result.passes(policy) else 'FAIL'}"
-    )
     _echo_verdict(result, result.passes(policy))
     _echo_missing_crs(result)
     _echo_unmatched_rules(profile, result.dataset_name)

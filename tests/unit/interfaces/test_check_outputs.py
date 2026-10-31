@@ -42,7 +42,7 @@ def test_check_writes_report_and_issue_gpkg_in_geoqc_output(tmp_path: Path) -> N
     report = tmp_path / "geoqc_output" / "parcels_report.html"
     assert f"Issue layers: {issues.resolve()}" in result.stdout
     assert f"Report: {report.resolve()}" in result.stdout
-    assert _issue_rows(issues) == int(result.stdout.split("issues=")[1].split()[0]) > 0
+    assert _issue_rows(issues) > 0
     assert "leaflet" in report.read_text(encoding="utf-8").casefold()
 
 
@@ -159,6 +159,25 @@ def test_presets_command_lists_packaged_and_generic_presets() -> None:
     assert "Bidang tanah" in result.stdout
 
 
+def test_presets_command_groups_output_with_own_descriptions() -> None:
+    result = CliRunner().invoke(app, ["presets"])
+
+    out = result.stdout
+    assert "Generic preset by geometry type." not in out
+    indonesian = out.index("Indonesian presets:")
+    general = out.index("General presets:")
+    automatic = out.index("Automatic (used when no preset is given):")
+    assert indonesian < general < automatic
+    position = {
+        line.split()[0]: out.index(line) for line in out.splitlines() if line.startswith("  ")
+    }
+    assert indonesian < position["jalan"] < general
+    for name in ("parcel", "road", "admin_boundary", "point_survey"):
+        assert general < position[name] < automatic
+    for name in ("generic-polygon", "generic-line", "generic-point"):
+        assert position[name] > automatic
+
+
 def test_packaged_presets_match_docs_examples_and_load() -> None:
     from geoqc.infrastructure.gis.profile_loading import (
         list_builtin_presets,
@@ -179,8 +198,8 @@ def test_check_accepts_indonesian_preset_name(tmp_path: Path) -> None:
     result = _check(str(source), "--preset", "bidang-tanah", "--no-output")
 
     assert result.exit_code != 2, result.output
-    assert "QC complete" in result.stdout
-    assert "issues=0" not in result.stdout
+    assert "QC complete" not in result.stdout
+    assert result.stdout.startswith(("PASS", "FAIL"))
 
 
 def test_check_still_accepts_generic_preset_and_rejects_unknown(tmp_path: Path) -> None:
@@ -204,8 +223,8 @@ def test_preset_warns_when_its_layer_does_not_match_the_dataset(tmp_path: Path) 
     other = _check(str(mismatched), "--preset", "bidang-tanah", "--no-output")
     same = _check(str(matching), "--preset", "bidang-tanah", "--no-output")
 
-    assert "no topology rule applies to 'parcels'" in other.stdout
-    assert "bidang_tanah" in other.stdout
+    assert "Preset bidang-tanah applied to layer parcels" in other.stdout
+    assert "Warning: no topology rule" not in other.stdout
     assert "Warning: no topology rule" not in same.stdout
 
 
