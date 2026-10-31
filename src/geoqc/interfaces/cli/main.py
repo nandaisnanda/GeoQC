@@ -9,9 +9,10 @@ from typing import Annotated
 from uuid import uuid4
 
 import geopandas as gpd  # type: ignore[import-untyped]
+import pandas as pd
 import shapely
 import typer
-from pyogrio import list_layers, read_info  # type: ignore[import-untyped]
+from pyogrio import list_layers, read_info, write_dataframe  # type: ignore[import-untyped]
 from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
 from typer import _click
 from typer.core import TyperGroup
@@ -199,6 +200,7 @@ def _echo_verdict(result: DatasetAuditResult, passed: bool) -> None:
     affected = {
         index
         for issue in result.issues
+        if issue.severity is not Severity.INFO
         for index in (
             *issue.feature_indices,
             issue.feature_index,
@@ -278,7 +280,7 @@ def _bind_preset_layer(profile: QualityProfile, preset: str, layer_name: str) ->
     return replace(profile, topology_rules=rules)
 
 
-_REPORT_HINT ='HTML report skipped: install the report extra with pip install "geoqc[report]".'
+_REPORT_HINT = 'HTML report skipped: install the report extra with pip install "geoqc[report]".'
 
 
 def _default_output(source: Path, layer: str | None, suffix: str) -> Path:
@@ -751,6 +753,88 @@ _SAFE_FIX_CONFIG = RepairConfig(resolve_overlaps=False, fill_gaps=False)
 # Preview-only pass: detects every overlap and enclosed gap without applying it.
 _REVIEW_CONFIG = RepairConfig(gap_area_threshold=float("inf"))
 _REVIEW_ISSUES = (RepairIssueType.OVERLAP, RepairIssueType.GAP)
+_FIX_LOG_LAYER = "geoqc_fix_log"
+
+
+def _fix_layer(
+    source: Path, layer: str | None, layer_name: str
+) -> tuple[gpd.GeoDataFrame, int, int, list[dict[str, object]]]:
+    """Fix one layer; return the frame, fixed count, review count and log rows."""
+    frame = gpd.read_file(source, layer=layer)
+    positions = [
+        index
+        for index, geometry in enumerate(frame.geometry)
+        if geometry is not None and not geometry.is_empty
+    ]
+    # Lines are never rewritten: a bad line is flagged and left as it is.
+    line_types = {"LineString", "MultiLineString"}
+    line_positions = [i for i in positions if frame.geometry.iloc[i].geom_type in line_types]
+    line_set = set(line_positions)
+    poly_positions = [i for i in positions if i not in line_set]
+    geometries = [frame.geometry.iloc[index] for index in poly_positions]
+    safe = repair_geometries(geometries, _SAFE_FIX_CONFIG)
+    safe_geometries = [shapely.from_wkt(wkt) for wkt in safe.after_wkt]
+    preview = repair_geometries(safe_geometries, _REVIEW_CONFIG)
+
+    reasons: list[set[str]] = [set() for _ in geometries]
+    actions: list[list[str]] = [[] for _ in geometries]
+    for item in safe.report.results:
+        if item.result.status is RepairStatus.FAILED:
+            reasons[item.feature_index].add("repair_failed")
+        for action in item.result.actions:
+            actions[item.feature_index].append(str(action.issue_type.value))
+    for item in preview.report.results:
+        for action in item.result.actions:
+            if action.issue_type in _REVIEW_ISSUES:
+                reasons[item.feature_index].add(str(action.issue_type.value))
+
+    output_geometries = list(frame.geometry)
+    review_column: list[str | None] = [None] * len(frame)
+    log: list[dict[str, object]] = []
+    for offset, index in enumerate(poly_positions):
+        before = geometries[offset]
+        after = safe_geometries[offset]
+        output_geometries[index] = after
+        if reasons[offset]:
+            review_column[index] = ",".join(sorted(reasons[offset]))
+        if not reasons[offset] and not actions[offset]:
+            continue
+        area_before = float(before.area)
+        area_after = float(after.area)
+        change = (area_after - area_before) / area_before * 100 if area_before else 0.0
+        log.append(
+            {
+                "layer": layer_name,
+                "feature_index": index,
+                "actions": ",".join(actions[offset]),
+                "area_before": area_before,
+                "area_after": area_after,
+                "area_change_pct": change,
+                "max_shift": float(shapely.hausdorff_distance(before, after)),
+                "review_reason": review_column[index],
+            }
+        )
+    for index in line_positions:
+        line = frame.geometry.iloc[index]
+        if line.is_valid and line.is_simple:
+            continue
+        review_column[index] = RepairIssueType.SELF_INTERSECTION.value
+        log.append(
+            {
+                "layer": layer_name,
+                "feature_index": index,
+                "actions": "",
+                "area_before": None,
+                "area_after": None,
+                "area_change_pct": None,
+                "max_shift": 0.0,
+                "review_reason": review_column[index],
+            }
+        )
+    fixed = frame.set_geometry(gpd.GeoSeries(output_geometries, index=frame.index, crs=frame.crs))
+    fixed["geoqc_review"] = review_column
+    needs_review = sum(1 for value in review_column if value)
+    return fixed, safe.report.repaired_count, needs_review, log
 
 
 @app.command(
@@ -762,14 +846,15 @@ def fix(
     output: Annotated[Path, typer.Argument(help="New output GeoPackage path.")],
     layer: Annotated[
         str | None,
-        typer.Option(help="Input layer name; required for multi-layer datasets."),
+        typer.Option(help="Input layer name; omit to fix every layer of a multi-layer input."),
     ] = None,
     overwrite: Annotated[
         bool,
         typer.Option("--overwrite", help="Replace an existing output GeoPackage."),
     ] = False,
 ) -> None:
-    """Apply safe geometry fixes and flag overlaps and gaps for review."""
+    """Apply safe geometry fixes and flag overlaps, gaps and bad lines for review."""
+    lines: list[str] = []
     try:
         if output.suffix.lower() != ".gpkg":
             raise ValueError("Output must be a .gpkg file.")
@@ -779,46 +864,41 @@ def fix(
             raise FileExistsError(f"Output exists: {output}. Pass --overwrite to replace it.")
         if not source.exists():
             raise FileNotFoundError(f"Input not found: {source}")
+        names: list[str | None] = [layer]
         if layer is None:
-            layers = list_layers(source)
-            if len(layers) > 1:
-                names = ", ".join(str(row[0]) for row in layers)
-                raise ValueError(f"Input has multiple layers ({names}); pass --layer.")
-        frame = gpd.read_file(source, layer=layer)
-        positions = [
-            index
-            for index, geometry in enumerate(frame.geometry)
-            if geometry is not None and not geometry.is_empty
-        ]
-        geometries = [frame.geometry.iloc[index] for index in positions]
-        safe = repair_geometries(geometries, _SAFE_FIX_CONFIG)
-        safe_geometries = [shapely.from_wkt(wkt) for wkt in safe.after_wkt]
-        preview = repair_geometries(safe_geometries, _REVIEW_CONFIG)
-
-        reasons: list[set[str]] = [set() for _ in geometries]
-        for item in safe.report.results:
-            if item.result.status is RepairStatus.FAILED:
-                reasons[item.feature_index].add("repair_failed")
-        for item in preview.report.results:
-            for action in item.result.actions:
-                if action.issue_type in _REVIEW_ISSUES:
-                    reasons[item.feature_index].add(str(action.issue_type.value))
-
-        output_geometries = list(frame.geometry)
-        review_column: list[str | None] = [None] * len(frame)
-        for offset, index in enumerate(positions):
-            output_geometries[index] = safe_geometries[offset]
-            if reasons[offset]:
-                review_column[index] = ",".join(sorted(reasons[offset]))
-        fixed = frame.set_geometry(
-            gpd.GeoSeries(output_geometries, index=frame.index, crs=frame.crs)
-        )
-        fixed["geoqc_review"] = review_column
+            spatial = [str(row[0]) for row in list_layers(source) if row[1] is not None]
+            if len(spatial) > 1:
+                names = list(spatial)
+        multi = layer is None and len(names) > 1
 
         output.parent.mkdir(parents=True, exist_ok=True)
         temporary = output.with_name(f".{output.stem}.{uuid4().hex}.gpkg")
+        log: list[dict[str, object]] = []
         try:
-            fixed.to_file(temporary, layer=layer or source.stem, driver="GPKG")
+            for name in names:
+                out_name = name or layer or source.stem
+                fixed, repaired, needs_review, rows = _fix_layer(source, name, out_name)
+                fixed.to_file(temporary, layer=out_name, driver="GPKG", mode="a")
+                log.extend(rows)
+                prefix = f"layer={out_name} " if multi else ""
+                lines.append(f"{prefix}Fixed {repaired}, needs review {needs_review}")
+            columns = [
+                "layer",
+                "feature_index",
+                "actions",
+                "area_before",
+                "area_after",
+                "area_change_pct",
+                "max_shift",
+                "review_reason",
+            ]
+            write_dataframe(
+                pd.DataFrame(log, columns=columns),
+                temporary,
+                layer=_FIX_LOG_LAYER,
+                driver="GPKG",
+                append=True,
+            )
             temporary.replace(output)
         finally:
             if temporary.exists():
@@ -834,9 +914,9 @@ def fix(
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
 
-    needs_review = sum(1 for item in reasons if item)
-    typer.echo(f"Fixed {safe.report.repaired_count}, needs review {needs_review}")
-    typer.echo(f"Output: {output.resolve()} layer={layer or source.stem}")
+    for line in lines:
+        typer.echo(line)
+    typer.echo(f"Output: {output.resolve()}")
 
 
 def _write_json_report(path: Path, payload: dict[str, object], *, protected: set[Path]) -> None:

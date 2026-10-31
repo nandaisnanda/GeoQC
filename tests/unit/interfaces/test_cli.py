@@ -237,10 +237,3 @@ def test_fix_command_refuses_to_overwrite_input(tmp_path: Path) -> None:
     assert result.exit_code == 2
     assert "must differ from the input" in result.stderr
     assert _sha256(source) == before
-
-
-def test_fix_command_requires_layer_for_multi_layer_input(tmp_path: Path) -> None:
-    result = runner.invoke(app, ["fix", str(SAMPLE_DEFECTS), str(tmp_path / "fixed.gpkg")])
-
-    assert result.exit_code == 2
-    assert "pass --layer" in result.stderr

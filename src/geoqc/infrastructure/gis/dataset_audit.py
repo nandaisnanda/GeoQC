@@ -7,6 +7,8 @@ from pathlib import Path
 
 import geopandas as gpd  # type: ignore[import-untyped]
 import pyogrio  # type: ignore[import-untyped]
+import shapely
+from shapely import STRtree
 
 from geoqc.domain.models import (
     AuditDatasetMetadata,
@@ -15,6 +17,8 @@ from geoqc.domain.models import (
     QualityPreset,
     QualityProfile,
 )
+from geoqc.domain.models.topology import DatasetIssue, TopologyRuleType
+from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.dataset_checks import (
     _METRIC_PRESETS,
     _attach_feature_ids,
@@ -39,6 +43,59 @@ from geoqc.infrastructure.gis.quality_workflow import (
 )
 
 _SUPPORTED_SUFFIXES = frozenset({".fgb", ".geojson", ".gpkg", ".json", ".parquet", ".shp"})
+
+
+_ENDPOINT_CODES = frozenset({"ROAD-DEAD_END", "TOP-NO-DANGLES"})
+
+
+def _merge_road_endpoints(
+    issues: list[DatasetIssue], frame: gpd.GeoDataFrame, profile: QualityProfile
+) -> list[DatasetIssue]:
+    """Report each unconnected road endpoint once, and grade genuine road ends as info.
+
+    ROAD-DEAD_END and TOP-NO-DANGLES describe the same endpoint. An endpoint with no
+    other road within the preset's no_overshoot_undershoot tolerance is a plain road
+    end (info); one with a road nearby but not connected stays a warning.
+    """
+    grouped: dict[tuple[int | None, float, float], list[DatasetIssue]] = {}
+    for issue in issues:
+        if issue.code in _ENDPOINT_CODES:
+            x, y = shapely.get_coordinates(shapely.from_wkt(issue.geometry_wkt))[0]
+            key = (issue.feature_index, round(float(x), 6), round(float(y), 6))
+            grouped.setdefault(key, []).append(issue)
+    if not grouped:
+        return issues
+    tolerances = [
+        rule.tolerance
+        for rule in profile.topology_rules
+        if rule.rule_type is TopologyRuleType.NO_OVERSHOOT_UNDERSHOOT
+    ]
+    tolerance = max(tolerances, default=0.0)
+    geometries = list(frame.geometry)
+    tree = STRtree(geometries)
+    replacements: dict[int, DatasetIssue] = {}
+    dropped: set[int] = set()
+    for (feature, x, y), members in grouped.items():
+        members.sort(key=lambda item: item.code != "TOP-NO-DANGLES")
+        keep = members[0]
+        dropped.update(id(item) for item in members[1:])
+        codes = ",".join(sorted({item.code for item in members}, reverse=True))
+        merged = replace(keep, metadata={**keep.metadata, "rule_codes": codes})
+        if tolerance > 0:
+            point = shapely.Point(x, y)
+            near = any(
+                int(other) != feature and point.distance(geometries[int(other)]) <= tolerance
+                for other in tree.query(point.buffer(tolerance))
+            )
+            if not near:
+                merged = replace(
+                    merged,
+                    severity=Severity.INFO,
+                    title="Road end",
+                    message=f"Feature {feature} ends here with no other road nearby.",
+                )
+        replacements[id(keep)] = merged
+    return [replacements.get(id(issue), issue) for issue in issues if id(issue) not in dropped]
 
 
 def audit_geodataframe(
@@ -104,6 +161,7 @@ def audit_geodataframe(
             )
             if runnable:
                 issues.extend(evaluate_topology_rules((layer,), runnable))
+        issues = _merge_road_endpoints(issues, frame, profile)
         issues = _attach_feature_ids(issues, frame, profile.id_column)
         issues = [
             replace(
