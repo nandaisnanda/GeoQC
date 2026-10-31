@@ -57,6 +57,7 @@ def test_road_ends_do_not_count_as_errors_in_cli(tmp_path: Path) -> None:
 
     # Three stubs plus the one road they undershoot; the 6 road ends are info only.
     assert "4 of 18 features have errors" in result.stdout, result.stdout
+<<<<<<< HEAD
 
 
 def test_road_ends_alone_pass_the_quality_gate() -> None:
@@ -70,3 +71,5 @@ def test_road_ends_alone_pass_the_quality_gate() -> None:
 
     assert {issue.severity for issue in result.issues} == {Severity.INFO}
     assert result.passes(profile.gate)
+=======
+>>>>>>> 9839fa00722e6c810dd2f8affaf06f52c3c746ed

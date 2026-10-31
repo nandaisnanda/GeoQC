@@ -20,6 +20,10 @@ FAIL: 2 errors, 1 warning
 4 of 4 features have errors (100.0%)
   GEO-SELF_INTERSECTION x1
   TOP-SLIVER x1
+<<<<<<< HEAD
+=======
+  TOP-NO-OVERLAP x1
+>>>>>>> 9839fa00722e6c810dd2f8affaf06f52c3c746ed
 ```
 
 `geoqc fix` writes repairs to a new GeoPackage and flags what needs a human:
@@ -27,6 +31,7 @@ FAIL: 2 errors, 1 warning
 ```console
 $ geoqc fix examples/sample_defects.gpkg fixed.gpkg
 layer=parcels Fixed 1, needs review 1
+<<<<<<< HEAD
 ```
 
 `geoqc presets` lists the built-in presets for `geoqc check --preset` (first lines shown):
@@ -37,6 +42,13 @@ Indonesian presets:
   batas-administrasi     Batas administrasi (provinsi, kabupaten/kota, kecamatan, desa).
   bidang-tanah           Bidang tanah (persil/parcel).
 ```
+=======
+layer=roads Fixed 0, needs review 0
+```
+
+`geoqc presets` lists the built-in Indonesian presets (`batas-administrasi`,
+`bidang-tanah`, `jalan`, `kawasan-hutan`, ...) for `geoqc check --preset`.
+>>>>>>> 9839fa00722e6c810dd2f8affaf06f52c3c746ed
 
 ## Features
 
