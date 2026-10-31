@@ -5,6 +5,7 @@ from collections import Counter
 import geopandas as gpd  # type: ignore[import-untyped]
 from shapely.geometry import LineString
 
+from geoqc.domain.models.topology import DatasetIssue
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.dataset_audit import audit_dataset, audit_geodataframe
 from geoqc.infrastructure.gis.profile_loading import load_builtin_preset
@@ -22,7 +23,7 @@ def _network() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(geometry=lines, crs="EPSG:32749")
 
 
-def _endpoint_issues() -> list:
+def _endpoint_issues() -> list[DatasetIssue]:
     result = audit_geodataframe(
         _network(), dataset_name="jalan", profile=load_builtin_preset("jalan")
     )
@@ -53,8 +54,6 @@ def test_jalanlokal_severity_counts_unchanged() -> None:
 
     result = audit_dataset("testdata/jalanlokal.shp", profile=profile)
 
-    counts = Counter(
-        issue.severity for issue in result.issues if issue.code == "TOP-NO-DANGLES"
-    )
+    counts = Counter(issue.severity for issue in result.issues if issue.code == "TOP-NO-DANGLES")
     assert counts[Severity.WARNING] == 178
     assert counts[Severity.INFO] == 130
