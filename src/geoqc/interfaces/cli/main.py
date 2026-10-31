@@ -801,7 +801,14 @@ def _fix_layer(
             continue
         area_before = float(before.area)
         area_after = float(after.area)
-        change = (area_after - area_before) / area_before * 100 if area_before else 0.0
+        was_invalid = not before.is_valid
+        comparable = area_before > 0 and not was_invalid
+        change = (area_after - area_before) / area_before * 100 if comparable else None
+        note = None
+        if was_invalid:
+            note = "before invalid, area not comparable"
+        elif not comparable:
+            note = "before area is zero, area not comparable"
         log.append(
             {
                 "layer": layer_name,
@@ -810,6 +817,7 @@ def _fix_layer(
                 "area_before": area_before,
                 "area_after": area_after,
                 "area_change_pct": change,
+                "area_note": note,
                 "max_shift": float(shapely.hausdorff_distance(before, after)),
                 "review_reason": review_column[index],
             }
@@ -827,6 +835,7 @@ def _fix_layer(
                 "area_before": None,
                 "area_after": None,
                 "area_change_pct": None,
+                "area_note": None,
                 "max_shift": 0.0,
                 "review_reason": review_column[index],
             }
@@ -889,6 +898,7 @@ def fix(
                 "area_before",
                 "area_after",
                 "area_change_pct",
+                "area_note",
                 "max_shift",
                 "review_reason",
             ]

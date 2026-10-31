@@ -46,6 +46,7 @@ _SUPPORTED_SUFFIXES = frozenset({".fgb", ".geojson", ".gpkg", ".json", ".parquet
 
 
 _ENDPOINT_CODES = frozenset({"ROAD-DEAD_END", "TOP-NO-DANGLES"})
+_TOUCH_TOLERANCE = 1e-6
 
 
 def _merge_road_endpoints(
@@ -83,11 +84,30 @@ def _merge_road_endpoints(
         merged = replace(keep, metadata={**keep.metadata, "rule_codes": codes})
         if tolerance > 0:
             point = shapely.Point(x, y)
-            near = any(
-                int(other) != feature and point.distance(geometries[int(other)]) <= tolerance
+            nearby = [
+                (point.distance(geometries[int(other)]), int(other))
                 for other in tree.query(point.buffer(tolerance))
-            )
-            if not near:
+                if int(other) != feature and point.distance(geometries[int(other)]) <= tolerance
+            ]
+            if nearby:
+                gap, other = min(nearby)
+                if gap < _TOUCH_TOLERANCE:
+                    ends = shapely.boundary(geometries[other])
+                    if point.distance(ends) >= _TOUCH_TOLERANCE:
+                        merged = replace(
+                            merged,
+                            title="T-junction not noded",
+                            message=f"Feature {feature} ends on feature {other} without a node.",
+                            metadata={**merged.metadata, "other_feature": other},
+                        )
+                else:
+                    merged = replace(
+                        merged,
+                        title="Possible undershoot",
+                        message=f"Feature {feature} ends {gap:.2f} m from feature {other}.",
+                        metadata={**merged.metadata, "other_feature": other, "gap": gap},
+                    )
+            else:
                 merged = replace(
                     merged,
                     severity=Severity.INFO,

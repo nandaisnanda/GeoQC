@@ -19,6 +19,7 @@ LOG_COLUMNS = [
     "area_before",
     "area_after",
     "area_change_pct",
+    "area_note",
     "max_shift",
     "review_reason",
 ]

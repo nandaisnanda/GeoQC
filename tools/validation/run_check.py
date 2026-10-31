@@ -6,18 +6,30 @@ import argparse
 import random
 from pathlib import Path
 
+import geopandas as gpd  # type: ignore[import-untyped]
 import pandas as pd
+import shapely
 from pyogrio import list_layers, read_info, write_dataframe
+from pyproj import CRS, Transformer
 
 from geoqc.infrastructure.gis.dataset_audit import audit_dataset
 from geoqc.infrastructure.gis.profile_loading import _generic_profile
 
 SUFFIXES = {".shp", ".gpkg", ".geojson", ".fgb", ".parquet"}
-COLUMNS = ["dataset", "layer", "code", "feature_index", "message", "verdict", "note"]
+COLUMNS = ["dataset", "layer", "code", "feature_index", "message", "x", "y", "verdict", "note"]
 HERE = Path(__file__).parent
 
 
-def collect(data: Path, per_code: int, seed: int) -> pd.DataFrame:
+def _locate(wkt: str, to_wgs84: Transformer | None) -> tuple[float, float, shapely.Point | None]:
+    """Return the source x, y of the issue's representative point and its EPSG:4326 point."""
+    point = shapely.from_wkt(wkt).representative_point()
+    if to_wgs84 is None:
+        return point.x, point.y, None
+    lon, lat = to_wgs84.transform(point.x, point.y)
+    return point.x, point.y, shapely.Point(lon, lat)
+
+
+def collect(data: Path, per_code: int, seed: int) -> gpd.GeoDataFrame:
     rng = random.Random(seed)
     pool: dict[str, list[dict[str, object]]] = {}
     for path in sorted(p for p in data.rglob("*") if p.suffix.lower() in SUFFIXES):
@@ -27,9 +39,16 @@ def collect(data: Path, per_code: int, seed: int) -> pd.DataFrame:
             layer = str(name)
             info = read_info(path, layer=layer)
             profile = _generic_profile(info.get("geometry_type"))
+            crs_text = info.get("crs")
+            to_wgs84 = (
+                Transformer.from_crs(CRS.from_user_input(crs_text), 4326, always_xy=True)
+                if crs_text
+                else None
+            )
             result = audit_dataset(path, layer=layer, profile=profile)
             for issue in result.issues:
                 index = issue.feature_index
+                x, y, point = _locate(issue.geometry_wkt, to_wgs84)
                 pool.setdefault(issue.code, []).append(
                     {
                         "dataset": path.name,
@@ -37,6 +56,9 @@ def collect(data: Path, per_code: int, seed: int) -> pd.DataFrame:
                         "code": issue.code,
                         "feature_index": -1 if index is None else index,
                         "message": issue.message,
+                        "x": x,
+                        "y": y,
+                        "geometry": point,
                         "verdict": "",
                         "note": "",
                     }
@@ -45,7 +67,9 @@ def collect(data: Path, per_code: int, seed: int) -> pd.DataFrame:
     for code in sorted(pool):
         items = pool[code]
         rows.extend(rng.sample(items, min(per_code, len(items))))
-    return pd.DataFrame(rows, columns=COLUMNS)
+    return gpd.GeoDataFrame(
+        pd.DataFrame(rows, columns=[*COLUMNS, "geometry"]), geometry="geometry", crs="EPSG:4326"
+    )
 
 
 def main() -> None:
