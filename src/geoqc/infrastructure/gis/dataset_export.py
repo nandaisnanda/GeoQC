@@ -13,6 +13,7 @@ from geoqc.domain.models import (
     IssueGeometryKind,
 )
 from geoqc.domain.models.quality_workflow import AuditResultExporter
+from geoqc.infrastructure.gis.impact import ImpactSummary
 from geoqc.infrastructure.gis.quality_workflow import (
     issues_to_geodataframe,
 )
@@ -73,13 +74,18 @@ def write_audit_report(
     destination: str | Path,
     *,
     overwrite: bool = False,
+    impact: ImpactSummary | None = None,
 ) -> Path:
     """Write JSON or self-contained HTML directly from a unified audit result."""
     path = Path(destination)
     if path.exists() and not overwrite:
         raise FileExistsError(path)
+    impact_data = impact.to_dict() if impact is not None else None
     if path.suffix.casefold() == ".json":
-        _atomic_text(path, json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n")
+        payload = result.to_dict()
+        if impact_data is not None:
+            payload["impact"] = impact_data
+        _atomic_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
         return path
     if path.suffix.casefold() == ".html":
         from geoqc import build_quality_report
@@ -87,7 +93,7 @@ def write_audit_report(
 
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
-            HtmlReportRenderer().write(build_quality_report(result), temporary)
+            HtmlReportRenderer().write(build_quality_report(result), temporary, impact=impact_data)
             temporary.replace(path)
         finally:
             if temporary.exists():

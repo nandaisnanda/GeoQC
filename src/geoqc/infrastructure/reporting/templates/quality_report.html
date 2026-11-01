@@ -28,6 +28,11 @@
     .section-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
     h2 { margin-bottom: 0; font-size: 22px; letter-spacing: -.02em; }
     .count { color: var(--muted); font-size: 13px; }
+    .impact-panel { padding: 18px 20px; margin-bottom: 14px; overflow-x: auto; }
+    .impact-panel h3 { margin: 0 0 6px; }
+    .impact-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .impact-table th, .impact-table td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--line); }
+    .impact-table th:not(:first-child), .impact-table td:not(:first-child) { text-align: right; }
     .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
     .stat, .panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
     .stat { padding: 20px; } .stat strong { display: block; font-size: 28px; line-height: 1.2; } .stat span { color: var(--muted); }
@@ -94,6 +99,39 @@
         {% endfor %}
       </div>
     </section>
+
+    {% if impact %}
+    {% macro measure(value) %}{{ "%.4f" | format(value) if 0 < value < 0.1 else "%.2f" | format(value) }}{% endmacro %}
+    {% macro share(value) %}{% if 0 < value < 0.05 or 99.95 <= value < 100 %}{{ "%.2f" | format(value) if 0.005 <= value < 99.995 else "%.4f" | format(value) }}{% else %}{{ "%.1f" | format(value) }}{% endif %}{% endmacro %}
+    <section aria-labelledby="impact-heading">
+      <div class="section-head"><h2 id="impact-heading">Impact</h2></div>
+      {% if impact.status != "computed" %}
+        <div class="panel impact-panel"><p>Impact: skipped (CRS missing)</p></div>
+      {% else %}
+        {% if impact.note %}<p class="count">Note: {{ impact.note }}</p>{% endif %}
+        {% for layer in impact.layers %}
+          <div class="panel impact-panel">
+            <h3>{{ layer.layer }}</h3>
+            {% if layer.total_measure is none %}
+              <p>{{ layer.affected_feature_count }} of {{ layer.feature_count }} features ({{ share(layer.share_percent) }}%) have errors</p>
+            {% else %}
+              <p>{{ measure(layer.affected_measure) }} {{ layer.unit }} of {{ measure(layer.total_measure) }} {{ layer.unit }} ({{ share(layer.share_percent) }}%) sits in {{ layer.affected_feature_count }} of {{ layer.feature_count }} features with errors</p>
+            {% endif %}
+            <table class="impact-table">
+              <thead><tr><th scope="col">Code</th><th scope="col">Issues</th><th scope="col">Features</th><th scope="col">Measure</th></tr></thead>
+              <tbody>
+                {% for code in layer.codes %}
+                  <tr><td>{{ code.code }}</td><td>{{ code.issue_count }}</td><td>{{ code.feature_count }}</td><td>{% if code.measure is none %}count only{% else %}{{ measure(code.measure) }} {{ code.unit }}{% endif %}</td></tr>
+                {% else %}
+                  <tr><td colspan="4">No warning or error findings.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </section>
+    {% endif %}
 
     {% if map_html %}
     <section class="map-section" id="issue-map" aria-labelledby="map-heading">

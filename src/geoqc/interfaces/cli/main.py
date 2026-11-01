@@ -41,6 +41,7 @@ from geoqc.domain.models import DatasetAuditResult, RepairStatus
 from geoqc.domain.models.spatial_intelligence import RoadNetworkRepairConfig
 from geoqc.domain.rules import Severity
 from geoqc.infrastructure.gis.dataset_checks import MISSING_CRS_MESSAGE
+from geoqc.infrastructure.gis.impact import ImpactSummary, load_impact
 from geoqc.infrastructure.gis.parallel_audit import (
     DatasetAudit,
     DatasetAuditWorker,
@@ -295,6 +296,7 @@ def _write_check_outputs(
     *,
     overwrite_issues: bool,
     overwrite_report: bool,
+    impact: ImpactSummary | None = None,
 ) -> list[str]:
     """Write the issue GeoPackage and report, returning the lines to print."""
     lines = []
@@ -306,7 +308,7 @@ def _write_check_outputs(
         lines.append(f"Issue layers: {issues.resolve()}")
     if report is not None:
         try:
-            write_audit_report(result, report, overwrite=overwrite_report)
+            write_audit_report(result, report, overwrite=overwrite_report, impact=impact)
         except ImportError:
             lines.append(_REPORT_HINT)
         else:
@@ -621,6 +623,7 @@ def check_dataset(
             try:
                 layer_profile = profile or _auto_profile(source, name)
                 layer_result = run_dataset_audit(source, layer=name, profile=layer_profile)
+                layer_impact = load_impact(layer_result, source, name)
                 written = (
                     []
                     if no_output
@@ -630,6 +633,7 @@ def check_dataset(
                         _default_output(source, name, "report.html"),
                         overwrite_issues=True,
                         overwrite_report=True,
+                        impact=layer_impact,
                     )
                 )
             except (DataSourceError, OSError, TypeError, ValueError) as error:
@@ -640,6 +644,8 @@ def check_dataset(
             _echo_unmatched_rules(layer_profile, name)
             typer.echo(f"Layer: {name}")
             _echo_verdict(layer_result, layer_passed)
+            for line in layer_impact.cli_lines():
+                typer.echo(line)
             for line in written:
                 typer.echo(line)
             if not layer_passed:
@@ -653,18 +659,22 @@ def check_dataset(
     report_path = report or (None if no_output else _default_output(source, layer, "report.html"))
     try:
         result = run_dataset_audit(source, layer=layer, profile=profile)
+        impact = load_impact(result, source, layer)
         written = _write_check_outputs(
             result,
             issues_path,
             report_path,
             overwrite_issues=overwrite or issues is None,
             overwrite_report=report is None,
+            impact=impact,
         )
     except (FileExistsError, FileNotFoundError, OSError, TypeError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
 
     _echo_verdict(result, result.passes(policy))
+    for line in impact.cli_lines():
+        typer.echo(line)
     _echo_missing_crs(result)
     _echo_unmatched_rules(profile, result.dataset_name)
     for line in written:

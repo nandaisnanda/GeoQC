@@ -1,6 +1,8 @@
 """Jinja2 adapter for self-contained HTML quality reports."""
 
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
@@ -21,14 +23,22 @@ class HtmlReportRenderer:
         )
         self._map_renderer = map_renderer or InteractiveMapRenderer()
 
-    def render(self, report: QualityReport) -> str:
-        """Render a report to an HTML string."""
+    def render(self, report: QualityReport, *, impact: Mapping[str, Any] | None = None) -> str:
+        """Render a report to an HTML string, with an optional impact summary section."""
         template = self._environment.get_template("quality_report.html")
-        return template.render(report=report, map_html=self._map_renderer.render(report))
+        return template.render(
+            report=report, map_html=self._map_renderer.render(report), impact=impact
+        )
 
-    def write(self, report: QualityReport, destination: str | Path) -> Path:
+    def write(
+        self,
+        report: QualityReport,
+        destination: str | Path,
+        *,
+        impact: Mapping[str, Any] | None = None,
+    ) -> Path:
         """Render a report and write it as UTF-8, creating parent directories."""
         output_path = Path(destination)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(self.render(report), encoding="utf-8")
+        output_path.write_text(self.render(report, impact=impact), encoding="utf-8")
         return output_path
