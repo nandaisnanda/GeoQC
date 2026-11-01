@@ -40,4 +40,5 @@ artifacts/
 # Real-data validation tooling (tools/validation)
 tools/validation/data/
 tools/validation/out/
+tools/benchmark/out/
 tools/qgis_spike/geoqc_spike.zip
