@@ -26,6 +26,7 @@ indexes the documentation beyond the [README](../README.md).
 - [FAQ](faq.md)
 - [Developer guide](development.md)
 - [Roadmap](roadmap.md)
+- [Phase 0 code audit](audit/phase0-code-audit.md)
 - [Release checklist](release-checklist.md)
 - [Architecture decision records](adr/README.md)
 
