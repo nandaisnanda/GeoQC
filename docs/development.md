@@ -12,14 +12,19 @@
 ## Local setup
 
 ```bash
-uv sync --all-extras --all-groups
+uv sync
 npm --prefix apps/web ci
 ```
+
+`uv sync` installs the package with the `api` and `report` extras plus all
+dev tools (the `dev` group points at the `dev` extra in `pyproject.toml`).
+Without uv: `pip install -e ".[dev]"`, then run `pytest`. CI uses
+`uv sync --all-extras --all-groups`, which is a superset of the same set.
 
 ## Quality gate
 
 ```bash
-uv sync --all-extras --all-groups
+uv sync
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src tests

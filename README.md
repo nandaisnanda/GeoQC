@@ -305,7 +305,7 @@ the `0.x` series. Other modules are advanced APIs and may change with notice in
 ## Development
 
 ```bash
-uv sync --all-extras --all-groups
+uv sync
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src tests

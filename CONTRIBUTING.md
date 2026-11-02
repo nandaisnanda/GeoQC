@@ -17,9 +17,13 @@ Install [uv](https://docs.astral.sh/uv/) and Node.js 22 or a current supported
 LTS release, then run:
 
 ```bash
-uv sync --all-extras --all-groups
+uv sync
 npm --prefix apps/web ci
 ```
+
+`uv sync` installs the package with the `api` and `report` extras plus all
+dev tools, so a plain `uv run pytest` works afterwards. Without uv, use
+`pip install -e ".[dev]"` and run `pytest`.
 
 ## Quality requirements
 
