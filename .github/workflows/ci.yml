@@ -32,8 +32,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
+      # Same command as CONTRIBUTING.md and docs/development.md. The default
+      # `dev` group pulls the `dev` extra, which bundles the api/report extras
+      # and every test and lint tool, so nothing else is needed here.
       - name: Install dependencies
-        run: uv sync --all-extras --all-groups
+        run: uv sync
 
       - name: Check formatting
         run: uv run ruff format --check .
@@ -70,6 +73,26 @@ jobs:
           .artifact-venv/bin/python -m pip install --disable-pip-version-check dist/*.whl
           .artifact-venv/bin/python -c "import geoqc; print(geoqc.__version__)"
           .artifact-venv/bin/geoqc --help
+
+  # Locks the no-uv setup path documented in CONTRIBUTING.md: a contributor
+  # without uv must be able to install with pip and run plain `pytest`.
+  python-no-uv:
+    name: Python without uv (pip + pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install with pip only
+        run: pip install -e ".[dev]"
+
+      # Runs the whole suite: `addopts` always enables coverage and the
+      # project-wide gate, so a partial selection would fail the gate.
+      - name: Plain pytest works
+        run: pytest -q
 
   web:
     name: Web client
