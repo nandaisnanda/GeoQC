@@ -12,14 +12,24 @@
 ## Local setup
 
 ```bash
-uv sync --all-extras --all-groups
+uv sync
 npm --prefix apps/web ci
 ```
+
+`uv sync` installs the package with the `api` and `report` extras plus all
+dev tools (the `dev` group points at the `dev` extra in `pyproject.toml`).
+Without uv: `pip install -e ".[dev]"`, then run `pytest`. CI runs the same
+steps — `uv sync` followed by `uv run pytest` — plus a pip-only job that
+installs `.[dev]` and runs `pytest` without uv, so the one-command setup
+cannot silently break.
+
+Prefer `uv run pytest` over a bare `pytest`: it uses the project virtual
+environment without activating it.
 
 ## Quality gate
 
 ```bash
-uv sync --all-extras --all-groups
+uv sync
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy src tests
@@ -51,6 +61,19 @@ uv run python benchmarks/parallel_streaming.py --datasets 8 --features 100000
 The scheduler can report fewer effective workers when CPU or current available
 memory makes the requested level unsafe. Benchmark output is diagnostic and is
 not a CI pass/fail threshold.
+
+## Troubleshooting
+
+- **`PermissionError` on the pytest temp root (Windows).** If pytest fails
+  while creating its base temp directory with `Access is denied` for
+  `%TEMP%\pytest-of-<user>`, that directory belongs to another account (for
+  example a leftover from an elevated run). Give pytest a writable root:
+
+  ```bash
+  uv run pytest --basetemp=.pytest-tmp
+  ```
+
+  `.pytest-tmp/` is already ignored by Git; delete it whenever you like.
 
 ## Definition of done
 

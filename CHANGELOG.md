@@ -8,6 +8,13 @@ All notable changes to GeoQC are documented here. This project follows
 
 ### Changed
 
+- A `dev` extra holds the test and lint tools together with the `api` and `report`
+  extras. `uv sync` now installs everything the test suite needs, and
+  `pip install -e ".[dev]"` works without uv.
+- CI installs with `uv sync` — the same command as the contributor docs — and a
+  pip-only job installs `.[dev]` and runs `pytest`, so the documented setup
+  cannot break unnoticed.
+
 - `geoqc fix` flags self-intersecting or non-simple lines as `self_intersection`
   for review and leaves their geometry unchanged.
 - `geoqc fix` without `--layer` now fixes every layer of a multi-layer input
