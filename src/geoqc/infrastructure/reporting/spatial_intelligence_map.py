@@ -5,42 +5,28 @@ from pathlib import Path
 
 import folium
 import shapely
-from shapely.geometry.base import BaseGeometry
 
 from geoqc.domain.models.spatial_intelligence import (
     BoundarySnapResult,
     RoadNetworkReport,
     SmallPolygonReport,
 )
-
-
-def _geojson(wkt: str) -> dict[str, object]:
-    return shapely.geometry.mapping(shapely.from_wkt(wkt))
-
-
-def _map(wkts: Iterable[str]) -> folium.Map:
-    geometries: list[BaseGeometry] = [shapely.from_wkt(value) for value in wkts]
-    if not geometries:
-        return folium.Map(location=[0, 0], zoom_start=2)
-    bounds = shapely.union_all(geometries).bounds
-    result = folium.Map(location=[(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2])
-    result.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-    return result
+from geoqc.infrastructure.reporting._folium_geometry import geojson_from_wkt, map_fitted_to
 
 
 class SpatialIntelligenceMap:
     """Render before/after geometry and categorized findings with Folium."""
 
     def boundary_snap(self, report: BoundarySnapResult, output: str | Path) -> Path:
-        result = _map(item.before_wkt for item in report.features)
+        result = map_fitted_to(item.before_wkt for item in report.features)
         for item in report.features:
             folium.GeoJson(
-                _geojson(item.before_wkt),
+                geojson_from_wkt(item.before_wkt),
                 style_function=lambda _: {"color": "#64748b", "dashArray": "5"},
                 name="Before",
             ).add_to(result)
             folium.GeoJson(
-                _geojson(item.after_wkt),
+                geojson_from_wkt(item.after_wkt),
                 style_function=lambda _: {"color": "#16a34a", "fillOpacity": 0.2},
                 tooltip=f"Feature {item.feature_index}: area Δ {item.area_delta:.6g}",
                 name="After",
@@ -51,11 +37,11 @@ class SpatialIntelligenceMap:
         self, report: RoadNetworkReport, geometries_wkt: Iterable[str], output: str | Path
     ) -> Path:
         wkts = list(geometries_wkt)
-        result = _map(wkts)
+        result = map_fitted_to(wkts)
         for value in wkts:
-            folium.GeoJson(_geojson(value), style_function=lambda _: {"color": "#334155"}).add_to(
-                result
-            )
+            folium.GeoJson(
+                geojson_from_wkt(value), style_function=lambda _: {"color": "#334155"}
+            ).add_to(result)
         colors = {
             "dead_end": "orange",
             "dangling_road": "red",
@@ -75,11 +61,11 @@ class SpatialIntelligenceMap:
         return self._save(result, output)
 
     def small_polygons(self, report: SmallPolygonReport, output: str | Path) -> Path:
-        result = _map(item.source_wkt for item in report.findings)
+        result = map_fitted_to(item.source_wkt for item in report.findings)
         colors = {"delete": "#dc2626", "merge": "#16a34a", "ignore": "#eab308"}
         for item in report.findings:
             folium.GeoJson(
-                _geojson(item.source_wkt),
+                geojson_from_wkt(item.source_wkt),
                 style_function=lambda _, color=colors[item.recommendation.value]: {
                     "color": color,
                     "fillOpacity": 0.35,
@@ -88,7 +74,7 @@ class SpatialIntelligenceMap:
             ).add_to(result)
             if item.preview_wkt:
                 folium.GeoJson(
-                    _geojson(item.preview_wkt),
+                    geojson_from_wkt(item.preview_wkt),
                     style_function=lambda _: {"color": "#2563eb", "dashArray": "4"},
                     name="Merge preview",
                 ).add_to(result)
