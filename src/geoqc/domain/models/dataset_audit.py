@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING, Any
 from geoqc.domain.rules import Severity
 
 if TYPE_CHECKING:
-    from geoqc.domain.models.quality_workflow import DatasetAuditResult
+    from geoqc.domain.models.audit_result import (
+        DatasetAuditResult,
+    )
 
 
 class CheckStatus(StrEnum):
@@ -152,10 +154,12 @@ def DatasetAuditReport(  # noqa: N802
         DeprecationWarning,
         stacklevel=2,
     )
-    from geoqc.domain.models.quality_workflow import (
+    from geoqc.domain.models.audit_result import (
+        DatasetAuditResult,
+    )
+    from geoqc.domain.models.scoring import (
         CrsGuardResult,
         CrsUnitStatus,
-        DatasetAuditResult,
     )
 
     return DatasetAuditResult(

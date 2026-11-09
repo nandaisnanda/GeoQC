@@ -8,6 +8,10 @@ from geoqc.domain.models.attribute_validation import (
     AttributeValidationIssue,
     AttributeValidationResult,
 )
+from geoqc.domain.models.audit_result import (
+    DatasetAuditResult,
+    WorkflowArtifacts,
+)
 from geoqc.domain.models.axis_order import (
     AxisOrderAuditResult,
     AxisOrderStatus,
@@ -47,35 +51,37 @@ from geoqc.domain.models.geometry_validation import (
     GeometryValidationIssue,
     GeometryValidationResult,
 )
+from geoqc.domain.models.quality_profile import (
+    QualityGatePolicy,
+    QualityPreset,
+    QualityProfile,
+)
 from geoqc.domain.models.quality_report import (
     GeographicPoint,
     QualityBadge,
     QualityReport,
     QualityReportIssue,
 )
-from geoqc.domain.models.quality_workflow import (
-    AttributeOverlapPolicy,
-    AttributeRule,
-    AttributeRuleType,
+from geoqc.domain.models.scoring import (
     CategoryScore,
     CrsGuardResult,
     CrsUnitStatus,
-    DatasetAuditResult,
+    ScoreDeduction,
+    ScoringPolicy,
+)
+from geoqc.domain.models.topology import (
+    AttributeOverlapPolicy,
+    AttributeRule,
+    AttributeRuleType,
     DatasetIssue,
     DatasetLayer,
     IssueGeometryKind,
-    QualityGatePolicy,
-    QualityPreset,
-    QualityProfile,
     RepairPlan,
     RepairPlanAction,
     RepairPlanConflict,
     RepairRisk,
-    ScoreDeduction,
-    ScoringPolicy,
     TopologyRule,
     TopologyRuleType,
-    WorkflowArtifacts,
 )
 from geoqc.domain.models.topology_repair import (
     CoverageRepairResult,
