@@ -44,6 +44,8 @@ All notable changes to GeoQC are documented here. This project follows
   - Renamed `geoqc.infrastructure.gis.legacy` to `deprecated_audit_arguments`.
 - The `audit_file()` and `run_quality_workflow()` deprecation warnings now say
   they will be removed in 0.3.0.
+- The enterprise and spatial intelligence map renderers share one private Folium
+  helper instead of two copies. Their HTML output is unchanged.
 
 ## [0.2.0] - 2026-10-30
 

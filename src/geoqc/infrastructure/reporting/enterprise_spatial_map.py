@@ -1,41 +1,25 @@
 """Self-contained interactive maps for enterprise spatial reports."""
 
-from collections.abc import Iterable
 from pathlib import Path
 
 import folium
-import shapely
-from shapely.geometry.base import BaseGeometry
 
 from geoqc.domain.models.enterprise_spatial import (
     DatasetDifferenceReport,
     SpatialConflictReport,
     SpatialDuplicateReport,
 )
-
-
-def _geojson(value: str) -> dict[str, object]:
-    return shapely.geometry.mapping(shapely.from_wkt(value))
-
-
-def _map(values: Iterable[str]) -> folium.Map:
-    geometries: list[BaseGeometry] = [shapely.from_wkt(value) for value in values]
-    if not geometries:
-        return folium.Map(location=[0, 0], zoom_start=2)
-    bounds = shapely.union_all(geometries).bounds
-    result = folium.Map(
-        location=[(bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2],
-        control_scale=True,
-    )
-    result.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-    return result
+from geoqc.infrastructure.reporting._folium_geometry import geojson_from_wkt, map_fitted_to
 
 
 class EnterpriseSpatialMap:
     """Render duplicate, difference, and conflict reports with togglable layers."""
 
     def duplicates(self, report: SpatialDuplicateReport, output: str | Path) -> Path:
-        result = _map(value for pair in report.pairs for value in (pair.left_wkt, pair.right_wkt))
+        result = map_fitted_to(
+            (value for pair in report.pairs for value in (pair.left_wkt, pair.right_wkt)),
+            control_scale=True,
+        )
         for pair in report.pairs:
             tooltip = (
                 f"Pair {pair.left_index}/{pair.right_index}: {pair.similarity_percent:.2f}% similar"
@@ -45,7 +29,7 @@ class EnterpriseSpatialMap:
                 (pair.right_wkt, "#dc2626", "Duplicate right"),
             ):
                 folium.GeoJson(
-                    _geojson(value),
+                    geojson_from_wkt(value),
                     name=name,
                     tooltip=tooltip,
                     style_function=lambda _, color=color: {
@@ -63,7 +47,7 @@ class EnterpriseSpatialMap:
             for value in (item.left_wkt, item.right_wkt)
             if value is not None
         ]
-        result = _map(values)
+        result = map_fitted_to(values, control_scale=True)
         colors = {
             "added": "#16a34a",
             "removed": "#dc2626",
@@ -75,7 +59,7 @@ class EnterpriseSpatialMap:
                 if value is None:
                     continue
                 folium.GeoJson(
-                    _geojson(value),
+                    geojson_from_wkt(value),
                     name=f"{item.kind.value} · {side}",
                     tooltip=(
                         f"{item.kind.value}: {item.geometry_similarity_percent:.2f}% geometry match"
@@ -89,11 +73,11 @@ class EnterpriseSpatialMap:
         return self._save(result, output)
 
     def conflicts(self, report: SpatialConflictReport, output: str | Path) -> Path:
-        result = _map(item.geometry_wkt for item in report.conflicts)
+        result = map_fitted_to((item.geometry_wkt for item in report.conflicts), control_scale=True)
         for item in report.conflicts:
             color = "#991b1b" if item.severity_score >= 80 else "#f59e0b"
             folium.GeoJson(
-                _geojson(item.geometry_wkt),
+                geojson_from_wkt(item.geometry_wkt),
                 name=item.conflict_type.value,
                 tooltip=f"Severity {item.severity_score:.1f} · {item.message}",
                 style_function=lambda _, color=color: {
