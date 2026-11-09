@@ -13,7 +13,7 @@ from geoqc.infrastructure.gis.finding_builders import (
     _minimum_area_issues,
     _overlap_issues,
 )
-from geoqc.infrastructure.gis.topology_rules_v2 import evaluate_advanced_rule
+from geoqc.infrastructure.gis.topology_rule_dispatch import evaluate_advanced_rule
 
 
 def evaluate_topology_rules(
