@@ -21,8 +21,8 @@ from geoqc.domain.models import (
 )
 from geoqc.domain.models.topology import DatasetIssue, IssueGeometryKind, RepairRisk
 from geoqc.domain.rules import Severity
+from geoqc.infrastructure.gis.audit_service import audit_geometries
 from geoqc.infrastructure.gis.parallel_audit import DatasetAudit
-from geoqc.infrastructure.gis.quality_workflow import audit_geometries
 from geoqc.infrastructure.gis.road_dataset_repair import (
     RoadDatasetRepairer,
     RoadDatasetRepairResult,

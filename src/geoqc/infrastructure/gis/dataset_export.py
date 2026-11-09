@@ -14,9 +14,7 @@ from geoqc.domain.models import (
 )
 from geoqc.domain.models.quality_workflow import AuditResultExporter
 from geoqc.infrastructure.gis.impact import ImpactSummary
-from geoqc.infrastructure.gis.quality_workflow import (
-    issues_to_geodataframe,
-)
+from geoqc.infrastructure.gis.issue_serializer import issues_to_geodataframe
 
 
 class _ResultExporter(AuditResultExporter):

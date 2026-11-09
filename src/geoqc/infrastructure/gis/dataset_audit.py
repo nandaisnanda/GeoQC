@@ -21,6 +21,7 @@ from geoqc.domain.models import (
 )
 from geoqc.domain.models.topology import DatasetIssue, TopologyRuleType
 from geoqc.domain.rules import Severity
+from geoqc.infrastructure.gis.audit_service import audit_geometries
 from geoqc.infrastructure.gis.dataset_checks import (
     _METRIC_PRESETS,
     _attach_feature_ids,
@@ -38,10 +39,7 @@ from geoqc.infrastructure.gis.dataset_values import _feature_attributes, _wkt
 from geoqc.infrastructure.gis.deprecated_audit_arguments import profile_from_legacy_arguments
 from geoqc.infrastructure.gis.finding_builders import _sliver_issues
 from geoqc.infrastructure.gis.profile_loading import _DEFAULT_PROFILE, _resolve_profile
-from geoqc.infrastructure.gis.quality_workflow import (
-    audit_geometries,
-    evaluate_topology_rules,
-)
+from geoqc.infrastructure.gis.topology_service import evaluate_topology_rules
 
 _SUPPORTED_SUFFIXES = frozenset({".fgb", ".geojson", ".gpkg", ".json", ".parquet", ".shp"})
 
