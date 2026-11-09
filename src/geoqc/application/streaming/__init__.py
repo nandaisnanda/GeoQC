@@ -11,13 +11,11 @@ from geoqc.application.streaming.models import (
     StreamingConfig,
     StreamingResult,
 )
-from geoqc.application.streaming.processor import RuleEngineChunkProcessor
 
 __all__ = [
     "DatasetMetadata",
     "DatasetSource",
     "FeatureChunk",
-    "RuleEngineChunkProcessor",
     "RuleResultCollector",
     "ScanOptions",
     "ScanPredicate",
