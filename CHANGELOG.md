@@ -44,6 +44,8 @@ All notable changes to GeoQC are documented here. This project follows
   - Renamed `geoqc.infrastructure.gis.legacy` to `deprecated_audit_arguments`.
 - The `audit_file()` and `run_quality_workflow()` deprecation warnings now say
   they will be removed in 0.3.0.
+- Renamed `geoqc.infrastructure.gis.topology_rules_v2` to `topology_rule_dispatch`.
+  No `v1` ever existed. The module is internal and not exported from `geoqc`.
 
 ## [0.2.0] - 2026-10-30
 
