@@ -35,8 +35,8 @@ from geoqc.infrastructure.gis.dataset_checks import (
 )
 from geoqc.infrastructure.gis.dataset_export import _ResultExporter
 from geoqc.infrastructure.gis.dataset_values import _feature_attributes, _wkt
+from geoqc.infrastructure.gis.deprecated_audit_arguments import profile_from_legacy_arguments
 from geoqc.infrastructure.gis.finding_builders import _sliver_issues
-from geoqc.infrastructure.gis.legacy import profile_from_legacy_arguments
 from geoqc.infrastructure.gis.profile_loading import _DEFAULT_PROFILE, _resolve_profile
 from geoqc.infrastructure.gis.quality_workflow import (
     audit_geometries,
