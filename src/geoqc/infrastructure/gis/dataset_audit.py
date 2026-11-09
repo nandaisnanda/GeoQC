@@ -10,12 +10,14 @@ import pyogrio  # type: ignore[import-untyped]
 import shapely
 from shapely import STRtree
 
+from geoqc.application.scoring_service import score_issues
 from geoqc.domain.models import (
     AuditDatasetMetadata,
     DatasetAuditResult,
     DatasetLayer,
     QualityPreset,
     QualityProfile,
+    ScoringPolicy,
 )
 from geoqc.domain.models.topology import DatasetIssue, TopologyRuleType
 from geoqc.domain.rules import Severity
@@ -32,7 +34,6 @@ from geoqc.infrastructure.gis.dataset_checks import (
     _missing_rule_column_issues,
 )
 from geoqc.infrastructure.gis.dataset_export import _ResultExporter
-from geoqc.infrastructure.gis.dataset_scoring import _rebuild_result
 from geoqc.infrastructure.gis.dataset_values import _feature_attributes, _wkt
 from geoqc.infrastructure.gis.finding_builders import _sliver_issues
 from geoqc.infrastructure.gis.legacy import profile_from_legacy_arguments
@@ -43,6 +44,35 @@ from geoqc.infrastructure.gis.quality_workflow import (
 )
 
 _SUPPORTED_SUFFIXES = frozenset({".fgb", ".geojson", ".gpkg", ".json", ".parquet", ".shp"})
+
+
+def _rebuild_result(
+    base: DatasetAuditResult, issues: Sequence[DatasetIssue], scoring: ScoringPolicy | None
+) -> DatasetAuditResult:
+    unique = {
+        (
+            item.fingerprint,
+            item.code,
+            item.feature_index,
+            item.related_feature_index,
+            item.geometry_wkt,
+        ): item
+        for item in issues
+    }
+    ordered = tuple(sorted(unique.values(), key=lambda item: (item.category, item.fingerprint)))
+    scores, deductions, overall = score_issues(ordered, base.feature_count, scoring)
+    return DatasetAuditResult(
+        dataset_name=base.dataset_name,
+        preset=base.preset,
+        feature_count=base.feature_count,
+        issues=ordered,
+        crs_guard=base.crs_guard,
+        category_scores=scores,
+        quality_score=overall,
+        score_deductions=deductions,
+        profile_name=base.profile_name,
+        schema_version=base.schema_version,
+    )
 
 
 _ENDPOINT_CODES = frozenset({"ROAD-DEAD_END", "TOP-NO-DANGLES"})

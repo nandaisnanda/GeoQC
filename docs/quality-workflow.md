@@ -215,5 +215,5 @@ features, attribute and schema changes, CRS equality, and boundary differences.
 Disabled checks use the stable reason `Check not selected by quality profile.`
 This applies to both profile selection and deprecated `checks` arguments.
 Implementation responsibilities live in `dataset_audit`, `dataset_checks`,
-`dataset_scoring`, `profile_loading`, `profile_schema`, and `dataset_export`;
+`profile_loading`, `profile_schema`, and `dataset_export`;
 `dataset_workflow` preserves historical imports through re-exports.
