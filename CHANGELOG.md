@@ -28,6 +28,22 @@ All notable changes to GeoQC are documented here. This project follows
   tolerance is now info, not a warning. Info findings no longer count in
   "features with errors" and do not fail the quality gate.
 - The CI workflow now runs on Ubuntu and Windows (Python 3.12 and 3.13).
+- Internal modules were consolidated. `import geoqc` exposes the same 91 names;
+  a new test pins that list.
+  - Removed the `geoqc.infrastructure.gis.quality_workflow` and
+    `geoqc.domain.models.quality_workflow` re-export modules. Import
+    `audit_geometries`, `assess_crs`, `evaluate_topology_rules`,
+    `issues_to_geodataframe`, and `score_issues` from their defining modules, or
+    from `geoqc`.
+  - Removed `geoqc.application.services.spatial_intelligence`
+    (`RoadNetworkRepairService`) and `geoqc.application.ports.spatial_intelligence`.
+    Nothing in GeoQC called them; the `geoqc` spatial functions are unchanged.
+  - Removed `geoqc.application.streaming.processor`
+    (`RuleEngineChunkProcessor`), which nothing constructed.
+  - Merged `geoqc.infrastructure.gis.dataset_scoring` into `dataset_audit`.
+  - Renamed `geoqc.infrastructure.gis.legacy` to `deprecated_audit_arguments`.
+- The `audit_file()` and `run_quality_workflow()` deprecation warnings now say
+  they will be removed in 0.3.0.
 
 ## [0.2.0] - 2026-10-30
 

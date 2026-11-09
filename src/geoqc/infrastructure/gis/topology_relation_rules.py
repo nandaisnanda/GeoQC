@@ -8,7 +8,7 @@ from shapely.geometry import MultiPoint, Point
 from shapely.geometry.base import BaseGeometry
 from shapely.strtree import STRtree
 
-from geoqc.domain.models.quality_workflow import (
+from geoqc.domain.models.topology import (
     AttributeOverlapPolicy,
     DatasetIssue,
     TopologyRule,

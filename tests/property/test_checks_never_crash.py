@@ -37,11 +37,12 @@ from geoqc.domain.models import (
 from geoqc.domain.models.geometry_validation import GeometryValidationResult
 from geoqc.domain.rules import ErrorPolicy, ResultStatus, RuleEngine, RuleRegistry
 from geoqc.domain.rules.examples import NonEmptyRule
+from geoqc.infrastructure.gis.audit_service import audit_geometries
 from geoqc.infrastructure.gis.dataset_audit import audit_geodataframe
 from geoqc.infrastructure.gis.dataset_checks import _checks_for_result
-from geoqc.infrastructure.gis.quality_workflow import audit_geometries, evaluate_topology_rules
 from geoqc.infrastructure.gis.shapely_geometry_validator import ShapelyGeometryValidator
 from geoqc.infrastructure.gis.streaming.geometry_processor import GeometryChunkProcessor
+from geoqc.infrastructure.gis.topology_service import evaluate_topology_rules
 from tests.property.strategies import (
     attribute_values,
     dirty_geometries,

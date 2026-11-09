@@ -7,7 +7,7 @@ import shapely
 from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 
-from geoqc.domain.models.quality_workflow import (
+from geoqc.domain.models.topology import (
     DatasetIssue,
     IssueGeometryKind,
     RepairRisk,

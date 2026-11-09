@@ -65,6 +65,8 @@ from geoqc.domain.models.spatial_intelligence import (
     SmallPolygonConfig,
     SmallPolygonReport,
 )
+from geoqc.infrastructure.gis.audit_service import audit_geometries
+from geoqc.infrastructure.gis.crs_analysis import assess_crs
 from geoqc.infrastructure.gis.dataset_workflow import (
     audit_dataset,
     audit_file,
@@ -78,12 +80,8 @@ from geoqc.infrastructure.gis.dataset_workflow import (
     write_audit_report,
     write_issue_layers,
 )
-from geoqc.infrastructure.gis.quality_workflow import (
-    assess_crs,
-    audit_geometries,
-    evaluate_topology_rules,
-    issues_to_geodataframe,
-)
+from geoqc.infrastructure.gis.issue_serializer import issues_to_geodataframe
+from geoqc.infrastructure.gis.topology_service import evaluate_topology_rules
 from geoqc.public_geometry import (
     RepairSession,
     open_repair_session,

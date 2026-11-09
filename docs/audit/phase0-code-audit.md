@@ -656,3 +656,61 @@ uv run ruff check .
 uv run mypy src tests
 uv run pytest
 ```
+
+## 15. T3 outcome
+
+Executed on 2026-11-09. Each PR is stacked on `chore/t2-code-audit`, because `main`
+does not contain this audit or the T1 setup commits yet. Baseline before any
+change: 619 tests, 92.77% coverage, gate 90.25%, `ruff` and `mypy` clean.
+
+| Audit verdict | Module | PR | Status |
+| --- | --- | --- | --- |
+| delete | `application/services/spatial_intelligence` | [#30](https://github.com/nandaisnanda/GeoQC/pull/30) | Done. Deviation 1. |
+| delete | `application/ports/spatial_intelligence` | #30 | Done |
+| delete | `application/streaming/processor` | #30 | Done. Deviation 1. |
+| delete facade | `gis/quality_workflow` | #30 | Done |
+| delete facade | `domain/models/quality_workflow` | #30 | Done |
+| merge | `gis/dataset_scoring` into `dataset_audit` | #30 | Done |
+| keep + rename | `gis/legacy` to `deprecated_audit_arguments` | #30 | Done |
+| deprecate | `gis/dataset_compat` | #30 | Done. Warnings name 0.3.0; new test. |
+| keep + rename | `gis/topology_rules_v2` to `topology_rule_dispatch` | [#31](https://github.com/nandaisnanda/GeoQC/pull/31) | Done |
+| tests | `shapely_topology_repairer`, `topology_service`, `public_reporting` | #31 | Done. 100% each. |
+| tests | `shapely_enterprise_spatial`, `dataset_values`, `deprecated_audit_arguments` | none | Not done. Deviation 3. |
+| keep, dedupe | `enterprise_spatial_map`, `spatial_intelligence_map` | [#32](https://github.com/nandaisnanda/GeoQC/pull/32) | Done. Deviation 2. |
+| keep, split in T4 | `finding_builders` | none | Untouched, as planned. |
+
+Numbers, each measured on its own branch:
+
+| Branch | Tests | Coverage | Modules under `src/geoqc` |
+| --- | --- | --- | --- |
+| baseline | 619 | 92.77% | 142 |
+| PR A | 746 | 92.79% | 136 |
+| PR B (on A) | 786 | 93.35% | 136 |
+| PR C (on A) | 757 | 92.83% | 137 |
+
+`dir(geoqc)` and `geoqc.__all__` (91 names) are identical to the baseline.
+
+### Deviations
+
+1. `application/services/__init__.py` and `application/streaming/__init__.py`
+   re-exported `RoadNetworkRepairService` and `RuleEngineChunkProcessor` in their
+   package `__all__`. The audit counted zero importers because nothing called
+   either class. Both re-exports went with the deletions. Neither name was in
+   `geoqc.__all__`.
+2. Section 9.1 says `_map` takes a layer label and a colour. It takes neither.
+   The only difference between the two copies was `control_scale=True` in the
+   enterprise map, so the shared helper takes that flag.
+3. PR B covered the three modules named in the T3 task. The audit also lists
+   `shapely_enterprise_spatial` (21 statements), `dataset_values` (6) and
+   `deprecated_audit_arguments` (1). They remain open.
+4. PR A's import-boundary test duplicates `tests/architecture/test_dependencies.py`,
+   which already enforces the domain boundary. The domain had no violations.
+
+### For T4
+
+- `dataset_audit.py` now holds `_rebuild_result`, so `finding_builders` still has
+  the same three importers.
+- `RuleEngineChunkProcessor` is gone. T4 adds its typed replacement from scratch.
+- `tests/unit/test_public_surface_snapshot.py` fails on any change to the 91
+  exported names. Update it in the same commit as an intended API change.
+- `DatasetAuditReport` and `dataset_compat` leave together in 0.3.0 (D3).

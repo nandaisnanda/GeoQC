@@ -12,8 +12,8 @@ from shapely.geometry import Point
 from typer.testing import CliRunner
 
 import geoqc
+from geoqc.application.scoring_service import score_issues
 from geoqc.domain.rules import Severity
-from geoqc.infrastructure.gis.quality_workflow import score_issues
 from geoqc.interfaces.cli.main import app
 
 

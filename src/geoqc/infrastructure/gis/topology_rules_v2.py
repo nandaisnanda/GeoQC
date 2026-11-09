@@ -4,7 +4,11 @@ from collections.abc import Mapping, Sequence
 
 from shapely.geometry.base import BaseGeometry
 
-from geoqc.domain.models.quality_workflow import DatasetIssue, TopologyRule, TopologyRuleType
+from geoqc.domain.models.topology import (
+    DatasetIssue,
+    TopologyRule,
+    TopologyRuleType,
+)
 from geoqc.infrastructure.gis.topology_geometry_rules import (
     _geometry_type_issues,
     _minimum_segment_issues,
