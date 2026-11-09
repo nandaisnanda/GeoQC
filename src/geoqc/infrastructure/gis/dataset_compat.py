@@ -21,7 +21,8 @@ def audit_file(
 ) -> DatasetAuditResult:
     """Deprecated alias for :func:`audit_dataset`."""
     warnings.warn(
-        "audit_file() is deprecated; use geoqc.audit_dataset() instead.",
+        "audit_file() is deprecated and will be removed in 0.3.0; "
+        "use geoqc.audit_dataset() instead.",
         DeprecationWarning,
         stacklevel=2,
     )
@@ -39,8 +40,8 @@ def run_quality_workflow(
 ) -> WorkflowArtifacts:
     """Deprecated orchestration wrapper around the canonical result methods."""
     warnings.warn(
-        "run_quality_workflow() is deprecated; call geoqc.audit_dataset() and the "
-        "result export methods instead.",
+        "run_quality_workflow() is deprecated and will be removed in 0.3.0; "
+        "call geoqc.audit_dataset() and the result export methods instead.",
         DeprecationWarning,
         stacklevel=2,
     )
