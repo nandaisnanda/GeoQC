@@ -83,8 +83,9 @@ CODE_TO_DEFECT = {
     "ROAD-DUPLICATE_SEGMENT": "duplicate_segment",
 }
 # Road endpoint findings share one code; the audit names the case in the title.
+UNDERSHOOT_TITLE = "Possible undershoot"
 ENDPOINT_TITLE_TO_DEFECT = {
-    "Possible undershoot": "undershoot",
+    UNDERSHOOT_TITLE: "undershoot",
     "T-junction not noded": "unnoded_t_junction",
 }
 # The code(s) whose findings score each defect type, for recall.csv.
@@ -181,6 +182,9 @@ class Row:
     guard_reported: bool
     # Set when audit_dataset raised on the defect file: nothing was reported, found = 0.
     audit_error: str = ""
+    # Overshoot only: defects whose stem also carries an endpoint finding titled
+    # "Possible undershoot". Scored as collateral, counted here so it stays visible.
+    undershoot_titled: int = 0
 
     @property
     def recall(self) -> float | None:
@@ -379,6 +383,20 @@ def score_file(
         scored=frozenset({defect_type}),
     )
     typed_clean = [item for item in baseline.findings if type_map(item) == defect_type]
+    undershoot_titled = (
+        sum(
+            1
+            for defect in defects
+            if any(
+                item.code in ENDPOINT_CODES
+                and item.title == UNDERSHOOT_TITLE
+                and defect.feature_index in item.features
+                for item in findings
+            )
+        )
+        if defect_type == "overshoot"
+        else 0
+    )
     row = Row(
         defect_type=defect_type,
         profile=name,
@@ -397,6 +415,7 @@ def score_file(
         collateral=split.collateral[defect_type],
         guard_skipped=audited.metric_guard and set(RULE_CODES[defect_type]) <= audited.rule_codes,
         guard_reported=audited.guard_reported,
+        undershoot_titled=undershoot_titled,
     )
     return row, split.unattributed
 
@@ -463,6 +482,7 @@ def aggregate(rows: Sequence[Row]) -> list[Row]:
             guard_skipped=all(item.guard_skipped for item in members),
             guard_reported=all(item.guard_reported for item in members),
             audit_error=next((item.audit_error for item in members if item.audit_error), ""),
+            undershoot_titled=sum(item.undershoot_titled for item in members),
         )
         for members in groups.values()
     ]
@@ -502,6 +522,28 @@ def _tag(crs: str) -> str:
     return crs.replace(":", "_")
 
 
+def _contradictory_titles(rows: Sequence[Row]) -> list[str]:
+    """One line per CRS: overshoot ends the endpoint merge also titles as undershoots.
+
+    It goes under the table: a markdown table cannot hold a free line between rows.
+    """
+    lines = []
+    for crs in dict.fromkeys(row.crs for row in rows if row.defect_type == "overshoot"):
+        members = [row for row in rows if row.defect_type == "overshoot" and row.crs == crs]
+        titled = sum(row.undershoot_titled for row in members)
+        total = sum(row.injected for row in members)
+        by_ratio = ", ".join(
+            f"r={row.ratio_r:g}: {row.undershoot_titled}/{row.injected}"
+            for row in members
+            if row.ratio_r is not None
+        )
+        lines.append(
+            f"contradictory titles ({crs}): {titled}/{total} overshoot ends also titled "
+            f"'{UNDERSHOOT_TITLE}' ({by_ratio}). Scored as allowed collateral."
+        )
+    return lines
+
+
 def render(
     rows: Sequence[Row],
     unattributed: Counter[tuple[str, str, str]],
@@ -530,7 +572,8 @@ def render(
         "| fp_clean | fp_defects | collateral | profile | crs |",
         "| --- | --- | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: | --- | --- |",
     ]
-    for row in aggregate(rows):
+    summed = aggregate(rows)
+    for row in summed:
         recall, interval = row.recall, row.interval
         shown = "skipped" if recall is None else f"{recall:.0%}"
         ci = "-" if interval is None else f"{interval[0]:.2f}-{interval[1]:.2f}"
@@ -540,6 +583,7 @@ def render(
             f"{ratio} | {row.expected_detect} | {ci} | {row.fp_clean} | {row.fp_defects} | "
             f"{row.collateral} | {row.profile} | {row.crs} |"
         )
+    lines += ["", *_contradictory_titles(summed)]
     lines += [
         "",
         "ratio_r = magnitude / tolerance; 'single' types run at one magnitude (exact checks,",

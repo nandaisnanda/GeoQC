@@ -37,3 +37,17 @@ def test_small_benchmark_finds_every_bowtie(
     assert len(truth) == 2 * len(run.DEFECT_TYPES)
     keys = [(row["layer"], row["feature_index"]) for row in truth]
     assert len(set(keys)) == len(keys)
+
+
+def test_report_counts_overshoot_ends_titled_as_undershoots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = _load(monkeypatch)
+
+    report = run.benchmark(tmp_path, parcels=40, road_cells=4, per_type=2, seed=7)
+
+    # At r = 0.5 the end lies 1 m past the through road, inside the 2 m merge radius.
+    assert (
+        "contradictory titles (EPSG:32748): 2/2 overshoot ends also titled "
+        "'Possible undershoot' (r=0.5: 2/2)" in report
+    )

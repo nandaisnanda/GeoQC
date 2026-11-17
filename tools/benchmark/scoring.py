@@ -41,7 +41,10 @@ ALLOWED_COLLATERAL: frozenset[tuple[str, str]] = frozenset(
     {
         # The baseline duplicate check sees the exact copy too.
         ("duplicate_segment_full", "TOP-NO-DUPLICATE"),
-        # Both ends of the partial copy lie mid-road, on the original, without a node.
+        # Both ends of the partial copy lie mid-road, on the original, without a node. The
+        # audit emits TOP-NO-DANGLES titled "T-junction not noded", which run.py maps to
+        # unnoded_t_junction. The mapped type is narrower than the raw code, which would
+        # also admit "Dangling endpoint" and "Possible undershoot".
         ("duplicate_segment_partial", "unnoded_t_junction"),
         ("undershoot", "overshoot"),
         ("overshoot", "undershoot"),
