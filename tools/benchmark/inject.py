@@ -30,6 +30,8 @@ SLIVER_COMPACTNESS = 0.05
 # The unnoded T-junction moves the through node this far along the street, past the
 # no_dangles tolerance (0.5 m), so the stem's end no longer meets a segment end.
 T_JUNCTION_SHIFT = 10.0
+# The spike's apex sits this far outside the parcel edge.
+SPIKE_LENGTH = 2.0
 CSV_COLUMNS = (
     "defect_type",
     "layer",
@@ -111,6 +113,8 @@ class Spec:
     tolerance: float | None = None
     magnitude: float | None = None
     swept: bool = False
+    # Largest ratio the sweep runs for this type (None: every ratio).
+    max_ratio: float | None = None
 
 
 def _defect(
@@ -377,6 +381,44 @@ def _null_geometry(
     return _defect("null_geometry", "parcels", index)
 
 
+def _spike(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Replace the middle of the east edge with a triangle pointing into the neighbour:
+    # base vertices at midpoint -/+ b/2, apex SPIKE_LENGTH out. `magnitude` is the apex
+    # angle in degrees, so b/2 = L * tan(theta / 2). The base vertices are off the
+    # 0.001 m grid (snapping them would change the angle by up to 5e-4 rad).
+    assert magnitude is not None and tolerance is not None
+    (index, neighbour), _ = site
+    x0, y0, x1, y1 = out[index].bounds
+    half = SPIKE_LENGTH * math.tan(math.radians(magnitude) / 2)
+    middle = (y0 + y1) / 2
+    out[index] = Polygon(
+        [
+            (x0, y0),
+            (x1, y0),
+            (x1, middle - half),
+            (x1 + SPIKE_LENGTH, middle),
+            (x1, middle + half),
+            (x1, y1),
+            (x0, y1),
+        ]
+    )
+    return _defect(
+        "spike",
+        "parcels",
+        index,
+        neighbour,
+        magnitude=magnitude,
+        tolerance=tolerance,
+        expected=magnitude < tolerance,
+    )
+
+
 SPECS: dict[str, Spec] = {
     # Exact geometry check: no size.
     "self_intersection": Spec("parcels", "generic-polygon", "single", _self_intersection),
@@ -422,6 +464,10 @@ SPECS: dict[str, Spec] = {
     # GEO-EMPTY_GEOMETRY is always on: no size.
     "empty_polygon": Spec("parcels", "bench-parcels", "single", _empty_polygon),
     "null_geometry": Spec("parcels", "bench-parcels", "single", _null_geometry),
+    # bench-parcels no_spikes: minimum angle 10 degrees; magnitude is the apex angle.
+    "spike": Spec(
+        "parcels", "bench-parcels", "east_pair", _spike, tolerance=10.0, swept=True, max_ratio=2.0
+    ),
 }
 # Subtypes scored by one finding code share a family; CODE_TO_DEFECT in run.py maps
 # codes to families.
@@ -609,7 +655,11 @@ def magnitudes(
     spec = SPECS[defect_type]
     if spec.swept:
         assert spec.tolerance is not None
-        return [(ratio, ratio * spec.tolerance) for ratio in ratios]
+        return [
+            (ratio, ratio * spec.tolerance)
+            for ratio in ratios
+            if spec.max_ratio is None or ratio <= spec.max_ratio
+        ]
     return [(None, spec.magnitude)]
 
 
