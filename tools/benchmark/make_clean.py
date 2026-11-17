@@ -1,4 +1,8 @@
-"""Write a clean synthetic parcel grid and a fully noded road grid to out/clean.gpkg."""
+"""Write a clean synthetic parcel grid and a fully noded road grid to out/clean.gpkg.
+
+The road grid mixes four-way crossings with interior three-way junctions, so both
+undershoots (at crossings) and unnoded T-junctions (at three-way junctions) fit in it.
+"""
 
 from __future__ import annotations
 
@@ -32,26 +36,48 @@ def parcel_grid(count: int) -> list[Polygon]:
     ]
 
 
+def _band_columns(band: int, cells: int) -> list[float]:
+    """x offsets (from the origin) of the vertical streets in one horizontal band.
+
+    Bands come in pairs: two aligned with the block grid, then two shifted by half a
+    block. Both border streets are always present, so every street end meets a road.
+    """
+    if (band // 2) % 2 == 0:
+        return [i * BLOCK_SIZE for i in range(cells + 1)]
+    half = BLOCK_SIZE / 2
+    return [0.0, *(half + i * BLOCK_SIZE for i in range(cells)), cells * BLOCK_SIZE]
+
+
 def road_grid(cells: int) -> list[LineString]:
     """A cells x cells street grid split at every junction, plus a cul-de-sac per corner.
 
-    Feature order is fixed: horizontal segments row by row, then vertical segments
-    column by column, then the four cul-de-sacs.
+    Where two bands with the same offset meet, the horizontal street has four-way
+    crossings; where a shifted band meets an aligned one, it has a three-way junction
+    every half block. Feature order is fixed: horizontal segments street by street,
+    then vertical segments band by band, then the four cul-de-sacs.
     """
     x0, y0 = ORIGIN
-
-    def node(i: int, j: int) -> tuple[float, float]:
-        return (x0 + i * BLOCK_SIZE, y0 + j * BLOCK_SIZE)
-
-    lines = [
-        LineString([node(i, j), node(i + 1, j)]) for j in range(cells + 1) for i in range(cells)
-    ]
-    lines += [
-        LineString([node(i, j), node(i, j + 1)]) for i in range(cells + 1) for j in range(cells)
-    ]
+    lines = []
+    for street in range(cells + 1):
+        columns = sorted(
+            {
+                *(_band_columns(street - 1, cells) if street > 0 else ()),
+                *(_band_columns(street, cells) if street < cells else ()),
+            }
+        )
+        y = y0 + street * BLOCK_SIZE
+        lines += [
+            LineString([(x0 + left, y), (x0 + right, y)])
+            for left, right in zip(columns, columns[1:], strict=False)
+        ]
+    for band in range(cells):
+        lines += [
+            LineString([(x0 + x, y0 + band * BLOCK_SIZE), (x0 + x, y0 + (band + 1) * BLOCK_SIZE)])
+            for x in _band_columns(band, cells)
+        ]
     reach = CUL_DE_SAC_LENGTH / math.sqrt(2)
     for i, j in ((0, 0), (cells, 0), (0, cells), (cells, cells)):
-        x, y = node(i, j)
+        x, y = x0 + i * BLOCK_SIZE, y0 + j * BLOCK_SIZE
         dx = reach if i else -reach
         dy = reach if j else -reach
         lines.append(LineString([(x, y), (x + dx, y + dy)]))
