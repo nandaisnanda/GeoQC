@@ -39,7 +39,10 @@ TypeMap = Callable[[Finding], "str | None"]
 # The finding type may be the benchmark defect type it maps to or its raw code.
 ALLOWED_COLLATERAL: frozenset[tuple[str, str]] = frozenset(
     {
-        ("duplicate_segment", "TOP-NO-DUPLICATE"),
+        # The baseline duplicate check sees the exact copy too.
+        ("duplicate_segment_full", "TOP-NO-DUPLICATE"),
+        # Both ends of the partial copy lie mid-road, on the original, without a node.
+        ("duplicate_segment_partial", "unnoded_t_junction"),
         ("undershoot", "overshoot"),
         ("overshoot", "undershoot"),
         # The overshooting stem crosses the through road without a node, and its moved

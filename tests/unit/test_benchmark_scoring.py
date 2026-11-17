@@ -94,7 +94,7 @@ def test_type_must_agree_to_match(scoring: ModuleType) -> None:
 
 
 def test_collateral_versus_false_positive(scoring: ModuleType) -> None:
-    defects = [Defect("undershoot", 1), Defect("duplicate_segment", 5, 6)]
+    defects = [Defect("undershoot", 1), Defect("duplicate_segment_full", 5, 6)]
     findings = [
         # Allowed pair, on a defect feature: collateral of the undershoot.
         scoring.Finding("TOP-OVER", "", frozenset({0, 1})),
@@ -110,7 +110,7 @@ def test_collateral_versus_false_positive(scoring: ModuleType) -> None:
 
     split = scoring.classify(defects, findings, (), by_code)
 
-    assert split.collateral == {"undershoot": 1, "duplicate_segment": 1}
+    assert split.collateral == {"undershoot": 1, "duplicate_segment_full": 1}
     assert split.fp_defects == {"overshoot": 1, "b": 1}
     assert split.unattributed == {"TOP-NO-GAP": 1}
 
