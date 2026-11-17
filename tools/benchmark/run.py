@@ -619,7 +619,9 @@ def main() -> None:
     parser.add_argument("--crs", default=f"{BASE_CRS},EPSG:4326")
     parser.add_argument("--ratios", default="0.5,0.9,1.1,2,10")
     parser.add_argument(
-        "--quick", action="store_true", help="per-type 20, 1 seed, ratios 0.5,2, both CRS"
+        "--quick",
+        action="store_true",
+        help="per-type 20, 1 seed, ratios 0.5,2, both CRS; runs twice to check determinism",
     )
     parser.add_argument("--out", type=Path, default=HERE / "out")
     args = parser.parse_args()
@@ -640,15 +642,17 @@ def main() -> None:
         )
 
     outputs = ("truth.csv", "recall.csv", "fp_clean.csv")
-    # Run the whole pipeline twice from scratch: the two reports must match.
     first = run_once()
     first_files = [(args.out / name).read_text(encoding="utf-8") for name in outputs]
     print(first)
-    second = run_once()
-    second_files = [(args.out / name).read_text(encoding="utf-8") for name in outputs]
     (args.out / "recall_summary.md").write_text(first, encoding="utf-8")
-    if first != second or first_files != second_files:
-        sys.exit("Runs differ: the benchmark is not deterministic.")
+    if args.quick:
+        # Run the whole pipeline again from scratch: the outputs must match. Only under
+        # --quick, because a full sweep takes hours.
+        second = run_once()
+        second_files = [(args.out / name).read_text(encoding="utf-8") for name in outputs]
+        if first != second or first_files != second_files:
+            sys.exit("Runs differ: the benchmark is not deterministic.")
     with (args.out / "fp_clean.csv").open(encoding="utf-8") as handle:
         unexpected = [
             row
