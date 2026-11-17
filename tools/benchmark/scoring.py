@@ -47,6 +47,9 @@ ALLOWED_COLLATERAL: frozenset[tuple[str, str]] = frozenset(
         # The spike's two base vertices cannot sit on the 0.001 m grid: their spacing
         # fixes the apex angle exactly.
         ("spike", "TOP-PRECISION-GRID"),
+        # Only for spacings that are not a multiple of the 0.001 m grid step (none of the
+        # default ratios): the inserted vertex then has to sit off the grid.
+        ("min_vertex_distance", "TOP-PRECISION-GRID"),
     }
 )
 LOCATION_BUFFER = 0.5

@@ -78,6 +78,7 @@ CODE_TO_DEFECT = {
     "TOP-MINIMUM-AREA": "minimum_area",
     "GEO-EMPTY_GEOMETRY": "empty",
     "TOP-NO-SPIKES": "spike",
+    "TOP-MINIMUM-VERTEX-DISTANCE": "min_vertex_distance",
 }
 # Road endpoint findings share one code; the audit names the case in the title.
 ENDPOINT_TITLE_TO_DEFECT = {

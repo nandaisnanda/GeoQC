@@ -254,3 +254,32 @@ def test_spike_sweep_stops_at_ratio_two(bench: tuple[ModuleType, ModuleType]) ->
     inject, _ = bench
 
     assert [ratio for ratio, _ in inject.magnitudes("spike", [0.5, 2, 10])] == [0.5, 2]
+
+
+@pytest.mark.parametrize("ratio", [0.5, 0.9, 1.1, 2, 10])
+def test_min_vertex_distance_adds_an_adjacent_vertex_at_ratio_times_tolerance(
+    bench: tuple[ModuleType, ModuleType], ratio: float
+) -> None:
+    inject, _ = bench
+    geometries, sites = _parcel_sites(bench)
+    ((_, magnitude),) = inject.magnitudes("min_vertex_distance", [ratio])
+
+    out, defects = inject.apply(
+        "min_vertex_distance", sites["min_vertex_distance"], geometries, magnitude, 0.05
+    )
+
+    for defect in defects:
+        edited, before = out[defect.feature_index], geometries[defect.feature_index]
+        ring = list(edited.exterior.coords)
+        closest = min(math.dist(a, b) for a, b in zip(ring, ring[1:], strict=False))
+        # The injector records the spacing as placed; floats near x = 430,000 hold the
+        # nominal ratio x 0.05 to within 6e-11 m.
+        assert closest == pytest.approx(defect.magnitude, abs=1e-12)
+        assert defect.magnitude == pytest.approx(ratio * 0.05, abs=1e-9)
+        assert len(ring) == len(before.exterior.coords) + 1
+        assert edited.area == pytest.approx(before.area, abs=1e-9)
+        assert edited.equals(before)
+        assert all(
+            abs(value / 0.001 - round(value / 0.001)) < 1e-6 for point in ring for value in point
+        )
+        assert defect.expected_detect is (ratio < 1)

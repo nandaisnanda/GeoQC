@@ -30,6 +30,8 @@ SLIVER_COMPACTNESS = 0.05
 # The unnoded T-junction moves the through node this far along the street, past the
 # no_dangles tolerance (0.5 m), so the stem's end no longer meets a segment end.
 T_JUNCTION_SHIFT = 10.0
+# Clean parcel coordinates sit on this grid (bench-parcels precision_grid size, metres).
+GRID = 0.001
 # The spike's apex sits this far outside the parcel edge.
 SPIKE_LENGTH = 2.0
 CSV_COLUMNS = (
@@ -419,6 +421,41 @@ def _spike(
     )
 
 
+def _on_grid(value: float) -> bool:
+    return abs(value / GRID - round(value / GRID)) < 1e-6
+
+
+def _min_vertex_distance(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Insert a vertex on the south edge, `magnitude` metres east of the south-west
+    # corner: adjacent to the corner, collinear, so the shape does not change. The edge
+    # runs along x, where floats near 430,000 resolve 6e-11 m; the new x is snapped to
+    # the grid when the distance is a multiple of the grid step, else left off grid.
+    assert magnitude is not None and tolerance is not None
+    (index,), _ = site
+    polygon = out[index]
+    assert isinstance(polygon, Polygon)
+    x0, y0, x1, y1 = polygon.bounds
+    x = x0 + magnitude
+    if _on_grid(magnitude):
+        x = round(x / GRID) * GRID
+    out[index] = Polygon([(x1, y0), (x1, y1), (x0, y1), (x0, y0), (x, y0)])
+    # Record the distance as placed (x - x0 is exact in floats), within 6e-11 of nominal.
+    return _defect(
+        "min_vertex_distance",
+        "parcels",
+        index,
+        magnitude=x - x0,
+        tolerance=tolerance,
+        expected=magnitude < tolerance,
+    )
+
+
 SPECS: dict[str, Spec] = {
     # Exact geometry check: no size.
     "self_intersection": Spec("parcels", "generic-polygon", "single", _self_intersection),
@@ -467,6 +504,10 @@ SPECS: dict[str, Spec] = {
     # bench-parcels no_spikes: minimum angle 10 degrees; magnitude is the apex angle.
     "spike": Spec(
         "parcels", "bench-parcels", "east_pair", _spike, tolerance=10.0, swept=True, max_ratio=2.0
+    ),
+    # bench-parcels minimum_vertex_distance: 0.05 m; magnitude is the vertex spacing.
+    "min_vertex_distance": Spec(
+        "parcels", "bench-parcels", "single", _min_vertex_distance, tolerance=0.05, swept=True
     ),
 }
 # Subtypes scored by one finding code share a family; CODE_TO_DEFECT in run.py maps
