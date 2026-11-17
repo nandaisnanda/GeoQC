@@ -283,3 +283,27 @@ def test_min_vertex_distance_adds_an_adjacent_vertex_at_ratio_times_tolerance(
             abs(value / 0.001 - round(value / 0.001)) < 1e-6 for point in ring for value in point
         )
         assert defect.expected_detect is (ratio < 1)
+
+
+def test_precision_grid_moves_exactly_one_vertex_off_the_grid(
+    bench: tuple[ModuleType, ModuleType],
+) -> None:
+    inject, _ = bench
+    geometries, sites = _parcel_sites(bench)
+    spec = inject.SPECS["precision_grid"]
+
+    def deviation(point: tuple[float, float]) -> float:
+        return math.hypot(*(value - round(value / 0.001) * 0.001 for value in point))
+
+    out, defects = inject.apply(
+        "precision_grid", sites["precision_grid"], geometries, spec.magnitude, spec.tolerance
+    )
+
+    for defect in defects:
+        ring = list(out[defect.feature_index].exterior.coords)[:-1]
+        off = [point for point in ring if deviation(point) > 1e-9]
+        assert len(off) == 1
+        assert deviation(off[0]) == pytest.approx(0.0003, abs=1e-9)
+        assert all(deviation(point) <= 1e-9 for point in ring if point != off[0])
+        assert out[defect.feature_index].is_valid
+        assert defect.expected_detect is True
