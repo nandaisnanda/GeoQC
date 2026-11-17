@@ -260,7 +260,11 @@ def to_metres(crs: str) -> Reproject | None:
 def to_finding(issue: DatasetIssue, back: Reproject | None) -> Finding:
     # Locations are compared in metres, so findings from other CRSs are mapped back.
     wkt = issue.geometry_wkt
-    if back is not None and wkt:
+    if issue.code.startswith("META-"):
+        # Dataset-level: the audit pins it to the first geometry, which an injector may
+        # edit. Without a location it still subtracts against the clean baseline.
+        wkt = ""
+    elif back is not None and wkt:
         wkt = str(shapely.to_wkt(back(shapely.from_wkt(wkt)), rounding_precision=-1))
     features = (issue.feature_index, issue.related_feature_index)
     return Finding(issue.code, issue.title, frozenset(i for i in features if i is not None), wkt)
