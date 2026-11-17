@@ -74,14 +74,46 @@ reports these areas of 1e-17 to 1e-22 square degrees: 72 overlaps and 17 gaps in
 20-defect overlap file. Real coverages with T-vertices behave the same way after
 reprojection.
 
-## jalan audit time grows with the square of the road count
+# PERFORMANCE
 
-| roads | audit time |
-| ---: | ---: |
-| 224 | 3.9 s |
-| 484 | 15.4 s |
-| 844 | 36.9 s |
+## jalan audit time grows close to the square of the road count
 
-`_overshoot_undershoot` (`topology_network_rules.py`) compares every line with every other
-line and computes an intersection for each pair. The benchmark keeps its road grid as small
-as the defect count allows.
+One `audit_dataset` call under the jalan preset (rules pointed at the benchmark layer), on
+clean benchmark roads in EPSG:32748, one process, Windows laptop. Two grid layouts:
+
+| road grid | roads | audit time |
+| --- | ---: | ---: |
+| plain grid (four-way crossings only) | 224 | 3.9 s |
+| plain grid | 484 | 15.4 s |
+| plain grid | 844 | 36.9 s |
+| mixed grid (crossings and three-way junctions) | 103 | 0.5 s |
+| mixed grid | 270 | 2.0 s |
+| mixed grid | 517 | 7.2 s |
+| mixed grid | 1040 | 34.7 s |
+
+A least-squares fit of log(time) on log(roads) gives an exponent of 1.83 for the mixed
+grid and 1.69 for the plain grid. Extrapolated, a 1,740-road file (the grid that fits 100
+isolated unnoded T-junctions) takes about 90 seconds per audit.
+
+## Profiled cause: two network rules scan every pair of lines
+
+Earlier hypothesis: `_overshoot_undershoot` dominates. cProfile of one audit at 270 roads
+(4.75 s total, top entries by cumulative time) shows a different main cost:
+
+| function (`src/geoqc/infrastructure/gis/`) | cumulative time | share |
+| --- | ---: | ---: |
+| `topology_service.py: evaluate_topology_rules` | 4.08 s | 86% |
+| `topology_network_rules.py: _endpoint_issues` (no_dangles) | 2.90 s | 61% |
+| `shapely Point.__new__`, called from `_endpoint_issues` | 1.60 s | 34% |
+| `topology_network_rules.py: _overshoot_undershoot` | 1.18 s | 25% |
+| `audit_service.py: audit_geometries` (geometry checks and road analyzer) | 0.62 s | 13% |
+| `road_network_analysis.py: analyze` | 0.37 s | 8% |
+
+`_endpoint_issues` checks each endpoint against both endpoints of every other line in a
+Python loop, and builds a new shapely `Point` for each of those endpoints on every pass:
+92,638 `Point` objects for 270 roads. `_overshoot_undershoot` loops over every pair of
+lines and computes an intersection for each pair (146,520 calls). Neither uses a spatial
+index. `road_network_analysis.py` does the same job with an `STRtree` and costs a tenth as
+much.
+
+The benchmark keeps its road grid as small as the defect count allows.
