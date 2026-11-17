@@ -80,6 +80,7 @@ CODE_TO_DEFECT = {
     "TOP-NO-SPIKES": "spike",
     "TOP-MINIMUM-VERTEX-DISTANCE": "min_vertex_distance",
     "TOP-PRECISION-GRID": "precision_grid",
+    "ROAD-DUPLICATE_SEGMENT": "duplicate_segment",
 }
 # Road endpoint findings share one code; the audit names the case in the title.
 ENDPOINT_TITLE_TO_DEFECT = {

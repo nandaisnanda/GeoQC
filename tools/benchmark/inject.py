@@ -21,6 +21,7 @@ from make_clean import PARCEL_SIZE
 from shapely import affinity
 from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
+from shapely.ops import substring
 from shapely.strtree import STRtree
 
 HERE = Path(__file__).parent
@@ -34,6 +35,8 @@ T_JUNCTION_SHIFT = 10.0
 GRID = 0.001
 # The precision_grid defect moves a vertex this far off the grid (metres).
 OFF_GRID_SHIFT = 0.0003
+# The partial duplicate copies this normalized stretch of the road.
+PARTIAL_SPAN = (0.3, 0.7)
 # The spike's apex sits this far outside the parcel edge.
 SPIKE_LENGTH = 2.0
 CSV_COLUMNS = (
@@ -294,6 +297,35 @@ def _overshoot(
     )
 
 
+def _duplicate_segment_full(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Append an exact copy of the road. magnitude = copy length / road length.
+    (index,), _ = site
+    out.append(out[index])
+    return _defect("duplicate_segment_full", "roads", index, len(out) - 1, magnitude=magnitude)
+
+
+def _duplicate_segment_partial(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Append a copy of the middle 40% of the road. The analyzer divides the shared
+    # length by the SHORTER line, so its overlap ratio is 1.0 >= 0.98: by that ratio
+    # the copy is a duplicate, hence expected_detect = True. (The analyzer also requires
+    # a Hausdorff distance <= 1e-8, which a contained part cannot meet.)
+    (index,), _ = site
+    out.append(substring(out[index], *PARTIAL_SPAN, normalized=True))
+    return _defect("duplicate_segment_partial", "roads", index, len(out) - 1, magnitude=magnitude)
+
+
 def _gap(
     out: list[BaseGeometry],
     site: Site,
@@ -538,6 +570,18 @@ SPECS: dict[str, Spec] = {
     "undershoot": Spec("roads", "jalan", "crossing_end", _undershoot, tolerance=2.0, swept=True),
     # jalan no_overshoot_undershoot: an overshoot longer than 2 m is a through road.
     "overshoot": Spec("roads", "jalan", "t_junction", _overshoot, tolerance=2.0, swept=True),
+    # ROAD-DUPLICATE_SEGMENT: analyzer constants (Hausdorff 1e-8, overlap ratio 0.98),
+    # not configurable, so no ratio. magnitude = copy length / road length.
+    "duplicate_segment_full": Spec(
+        "roads", "jalan", "road_single", _duplicate_segment_full, magnitude=1.0
+    ),
+    "duplicate_segment_partial": Spec(
+        "roads",
+        "jalan",
+        "road_single",
+        _duplicate_segment_partial,
+        magnitude=PARTIAL_SPAN[1] - PARTIAL_SPAN[0],
+    ),
     # bench-parcels no_gap: tolerance is the MAXIMUM gap area reported (1.0 m²).
     "gap": Spec("parcels", "bench-parcels", "interior_pair", _gap, tolerance=1.0, swept=True),
     # Baseline TOP-NO-DUPLICATE: topological equality, tolerance 0, in every profile.
@@ -580,6 +624,8 @@ FAMILY = {
     "duplicate_jitter": "duplicate",
     "empty_polygon": "empty",
     "null_geometry": "empty",
+    "duplicate_segment_full": "duplicate_segment",
+    "duplicate_segment_partial": "duplicate_segment",
 }
 DEFECT_TYPES = tuple(SPECS)
 LAYER_OF = {name: spec.layer for name, spec in SPECS.items()}
@@ -696,7 +742,14 @@ def _road_candidates(roads: Sequence[LineString], rng: random.Random) -> dict[st
     for node in crossings:
         index, end = rng.choice(nodes[node])
         ends.append(((index,), (end,)))
-    return {"t_junction": junctions, "crossing_end": ends}
+    # Roads joined to the network at both ends (not the cul-de-sacs), in a seeded order.
+    joined = [
+        ((index,), ())
+        for index, line in enumerate(roads)
+        if all(len(nodes[_key((x, y))]) > 1 for x, y in (line.coords[0], line.coords[-1]))
+    ]
+    rng.shuffle(joined)
+    return {"t_junction": junctions, "crossing_end": ends, "road_single": joined}
 
 
 def plan(

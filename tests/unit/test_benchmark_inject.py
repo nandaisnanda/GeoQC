@@ -334,3 +334,30 @@ def test_overshoot_extends_the_stem_past_the_through_road(
         )
         assert crossing.distance(stem.boundary) == pytest.approx(ratio * 2.0, abs=1e-9)
         assert defect.expected_detect is (ratio < 1)
+
+
+def test_duplicate_segments_copy_the_road_fully_or_in_part(
+    bench: tuple[ModuleType, ModuleType],
+) -> None:
+    inject, make_clean = bench
+    parcels, roads = make_clean.build(1600, 6)
+    lines = list(roads.geometry)
+    sites = inject.plan(list(parcels.geometry), lines, 2, seed=1)
+
+    for defect_type in ("duplicate_segment_full", "duplicate_segment_partial"):
+        spec = inject.SPECS[defect_type]
+        out, defects = inject.apply(
+            defect_type, sites[defect_type], lines, spec.magnitude, spec.tolerance
+        )
+
+        assert len(out) == len(lines) + len(defects)
+        for defect in defects:
+            road, copy = out[defect.feature_index], out[defect.related_index]
+            assert road.intersection(copy).length / copy.length >= 0.99
+            assert copy.length / road.length == pytest.approx(spec.magnitude)
+            if defect_type == "duplicate_segment_full":
+                assert copy.equals(road)
+            else:
+                assert not copy.equals(road)
+                assert road.covers(copy)
+            assert defect.expected_detect is True
