@@ -71,6 +71,29 @@ jobs:
           .artifact-venv/bin/python -c "import geoqc; print(geoqc.__version__)"
           .artifact-venv/bin/geoqc --help
 
+  benchmark:
+    name: Recall benchmark (quick)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --all-groups
+
+      - name: Run quick recall benchmark
+        # 10 defects per type keeps the double (determinism) run near one minute.
+        # Fails on a crash, on differing runs, or on unexpected clean-data findings.
+        timeout-minutes: 5
+        run: |
+          uv run python tools/benchmark/run.py --quick --per-type 10 > /dev/null
+          cat tools/benchmark/out/recall_summary.md >> "$GITHUB_STEP_SUMMARY"
+
   web:
     name: Web client
     runs-on: ubuntu-latest

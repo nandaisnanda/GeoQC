@@ -124,6 +124,7 @@ CSV_COLUMNS = (
 )
 GUARD_CARRIER = "checks[topology].status=skipped"
 QUICK_PER_TYPE, QUICK_SEEDS, QUICK_RATIOS = 20, 1, (0.5, 2.0)
+FULL_PER_TYPE = 100
 
 
 def _bench_parcels() -> QualityProfile:
@@ -696,7 +697,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--parcels", type=int, default=400, help="minimum parcel count")
     parser.add_argument("--road-cells", type=int, default=10, help="minimum road grid size")
-    parser.add_argument("--per-type", type=int, default=100)
+    parser.add_argument(
+        "--per-type", type=int, default=None, help="defects per type per file (default 100)"
+    )
     parser.add_argument("--seeds", type=int, default=5, help="number of seeds")
     parser.add_argument("--seed", type=int, default=42, help="first seed")
     parser.add_argument("--crs", default=f"{BASE_CRS},EPSG:4326")
@@ -704,13 +707,14 @@ def main() -> None:
     parser.add_argument(
         "--quick",
         action="store_true",
-        help="per-type 20, 1 seed, ratios 0.5,2, both CRS; runs twice to check determinism",
+        help="per-type 20 (unless --per-type is given), 1 seed, ratios 0.5,2, both CRS; "
+        "runs twice to check determinism",
     )
     parser.add_argument("--out", type=Path, default=HERE / "out")
     args = parser.parse_args()
-    per_type, seed_count, ratios = args.per_type, args.seeds, _floats(args.ratios)
+    per_type, seed_count, ratios = args.per_type or FULL_PER_TYPE, args.seeds, _floats(args.ratios)
     if args.quick:
-        per_type, seed_count, ratios = QUICK_PER_TYPE, QUICK_SEEDS, QUICK_RATIOS
+        per_type, seed_count, ratios = args.per_type or QUICK_PER_TYPE, QUICK_SEEDS, QUICK_RATIOS
     args.out.mkdir(parents=True, exist_ok=True)
 
     def run_once() -> str:
