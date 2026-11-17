@@ -262,6 +262,38 @@ def _undershoot(
     )
 
 
+def _overshoot(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Push the stem's end p, which sits on the through road, `magnitude` metres further
+    # along the stem's own direction: p' = p + s * unit(p - p_prev). The stem now crosses
+    # the through road at p and overshoots it by s.
+    assert magnitude is not None and tolerance is not None
+    (through, _, stem), detail = site
+    node = cast(Point, detail[0])
+    end = dict(context.nodes()[node])[stem]
+    line = out[stem]
+    assert isinstance(line, LineString)
+    coords = [(float(x), float(y)) for x, y in line.coords]
+    (px, py), (qx, qy) = coords[end], coords[1 if end == 0 else -2]
+    length = math.hypot(px - qx, py - qy)
+    coords[end] = (px + (px - qx) * magnitude / length, py + (py - qy) * magnitude / length)
+    out[stem] = LineString(coords)
+    return _defect(
+        "overshoot",
+        "roads",
+        stem,
+        through,
+        magnitude=magnitude,
+        tolerance=tolerance,
+        expected=magnitude < tolerance,
+    )
+
+
 def _gap(
     out: list[BaseGeometry],
     site: Site,
@@ -504,6 +536,8 @@ SPECS: dict[str, Spec] = {
     # jalan: no_overshoot_undershoot tolerance, also the radius _merge_road_endpoints uses
     # to title an unconnected end "Possible undershoot".
     "undershoot": Spec("roads", "jalan", "crossing_end", _undershoot, tolerance=2.0, swept=True),
+    # jalan no_overshoot_undershoot: an overshoot longer than 2 m is a through road.
+    "overshoot": Spec("roads", "jalan", "t_junction", _overshoot, tolerance=2.0, swept=True),
     # bench-parcels no_gap: tolerance is the MAXIMUM gap area reported (1.0 m²).
     "gap": Spec("parcels", "bench-parcels", "interior_pair", _gap, tolerance=1.0, swept=True),
     # Baseline TOP-NO-DUPLICATE: topological equality, tolerance 0, in every profile.
