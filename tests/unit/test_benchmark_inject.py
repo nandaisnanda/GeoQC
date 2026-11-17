@@ -73,13 +73,18 @@ def test_undershoot_magnitude_follows_the_ratio(
     lines = list(roads.geometry)
     sites = inject.plan(list(parcels.geometry), lines, 2, seed=1)
 
-    shortened, defects = inject.apply("undershoot", sites["undershoot"], lines, ratio)
+    ((_, magnitude),) = inject.magnitudes("undershoot", [ratio])
+    tolerance = inject.SPECS["undershoot"].tolerance
+
+    shortened, defects = inject.apply(
+        "undershoot", sites["undershoot"], lines, magnitude, tolerance
+    )
 
     for defect in defects:
         index = defect.feature_index
-        assert defect.magnitude == pytest.approx(ratio * inject.UNDERSHOOT_TOLERANCE)
+        assert defect.magnitude == pytest.approx(ratio * 2.0)
         assert lines[index].length - shortened[index].length == pytest.approx(defect.magnitude)
-        assert defect.ratio_r == ratio
+        assert defect.ratio_r == pytest.approx(ratio)
         assert defect.expected_detect is expected
 
 
@@ -91,7 +96,9 @@ def test_t_junction_keeps_every_feature_and_unnodes_the_stem(
     lines = list(roads.geometry)
     sites = inject.plan(list(parcels.geometry), lines, 2, seed=1)
 
-    out, defects = inject.apply("unnoded_t_junction", sites["unnoded_t_junction"], lines, None)
+    out, defects = inject.apply(
+        "unnoded_t_junction", sites["unnoded_t_junction"], lines, None, None
+    )
 
     assert len(out) == len(lines)
     for defect in defects:
