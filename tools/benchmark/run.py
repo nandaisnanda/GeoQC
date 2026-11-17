@@ -22,6 +22,7 @@ import shapely
 from inject import (
     DEFAULT_RATIO,
     DEFECT_TYPES,
+    FAMILY,
     LAYER_OF,
     PROFILE_OF,
     SPECS,
@@ -72,6 +73,8 @@ CODE_TO_DEFECT = {
     "GEO-DUPLICATE_VERTEX": "duplicate_vertex",
     "TOP-NO-OVERSHOOT-UNDERSHOOT": "overshoot",
     "TOP-NO-GAP": "gap",
+    # Families: one code scores several subtypes (inject.FAMILY).
+    "TOP-NO-DUPLICATE": "duplicate",
 }
 # Road endpoint findings share one code; the audit names the case in the title.
 ENDPOINT_TITLE_TO_DEFECT = {
@@ -80,7 +83,14 @@ ENDPOINT_TITLE_TO_DEFECT = {
 }
 # The code(s) whose findings score each defect type, for recall.csv.
 RULE_CODES = {
-    **{defect_type: (code,) for code, defect_type in CODE_TO_DEFECT.items()},
+    **{
+        defect_type: tuple(
+            code
+            for code, family in CODE_TO_DEFECT.items()
+            if family == FAMILY.get(defect_type, defect_type)
+        )
+        for defect_type in DEFECT_TYPES
+    },
     "undershoot": ("TOP-NO-DANGLES", "ROAD-DEAD_END"),
     # ROAD-DEAD_END cannot fire here: the stem's end touches the through line.
     "unnoded_t_junction": ("TOP-NO-DANGLES",),
@@ -337,16 +347,23 @@ def score_file(
     """
     name = PROFILE_OF[defect_type]
     findings = subtract_baseline(audited.findings, baseline.findings)
-    matched = match(defects, findings, defect_type_of, geometries)
+    own_family = FAMILY.get(defect_type, defect_type)
+
+    def type_map(finding: Finding) -> str | None:
+        # In a single-type file, the family's code scores this subtype.
+        mapped = defect_type_of(finding)
+        return defect_type if mapped == own_family else mapped
+
+    matched = match(defects, findings, type_map, geometries)
     split = classify(
         defects,
         [item for position, item in enumerate(findings) if position not in matched.values()],
         (),
-        defect_type_of,
+        type_map,
         geometries=geometries,
         scored=frozenset({defect_type}),
     )
-    typed_clean = [item for item in baseline.findings if defect_type_of(item) == defect_type]
+    typed_clean = [item for item in baseline.findings if type_map(item) == defect_type]
     row = Row(
         defect_type=defect_type,
         profile=name,
