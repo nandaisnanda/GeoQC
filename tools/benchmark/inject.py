@@ -18,6 +18,7 @@ from typing import cast
 
 import geopandas as gpd  # type: ignore[import-untyped]
 from make_clean import PARCEL_SIZE
+from shapely import affinity
 from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
 from shapely.strtree import STRtree
@@ -330,6 +331,28 @@ def _duplicate_jitter(
     )
 
 
+def _minimum_area(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Shrink the parcel about its centroid to an area of `magnitude` square metres.
+    assert magnitude is not None and tolerance is not None
+    (index,), _ = site
+    factor = math.sqrt(magnitude / out[index].area)
+    out[index] = affinity.scale(out[index], factor, factor, origin="centroid")
+    return _defect(
+        "minimum_area",
+        "parcels",
+        index,
+        magnitude=magnitude,
+        tolerance=tolerance,
+        expected=magnitude < tolerance,
+    )
+
+
 SPECS: dict[str, Spec] = {
     # Exact geometry check: no size.
     "self_intersection": Spec("parcels", "generic-polygon", "single", _self_intersection),
@@ -367,6 +390,10 @@ SPECS: dict[str, Spec] = {
     # One jitter size (1 cm): with tolerance 0 there is no ratio to sweep.
     "duplicate_jitter": Spec(
         "parcels", "bench-parcels", "single", _duplicate_jitter, tolerance=0.0, magnitude=0.01
+    ),
+    # bench-parcels minimum_area: 10 m²; magnitude is the shrunken area.
+    "minimum_area": Spec(
+        "parcels", "bench-parcels", "single", _minimum_area, tolerance=10.0, swept=True
     ),
 }
 # Subtypes scored by one finding code share a family; CODE_TO_DEFECT in run.py maps

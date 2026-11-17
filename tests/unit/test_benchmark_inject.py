@@ -177,3 +177,21 @@ def test_duplicate_jitter_moves_every_vertex_by_delta(
         assert not copy.equals(original)
         assert copy.is_valid
         assert defect.expected_detect is False
+
+
+@pytest.mark.parametrize("ratio", [0.5, 0.9, 1.1, 2, 10])
+def test_minimum_area_shrinks_to_ratio_times_tolerance(
+    bench: tuple[ModuleType, ModuleType], ratio: float
+) -> None:
+    inject, make_clean = bench
+    geometries, sites = _parcel_sites(bench)
+    ((_, magnitude),) = inject.magnitudes("minimum_area", [ratio])
+
+    out, defects = inject.apply("minimum_area", sites["minimum_area"], geometries, magnitude, 10.0)
+
+    assert make_clean.CRS == "EPSG:32748"
+    for defect in defects:
+        shrunk, before = out[defect.feature_index], geometries[defect.feature_index]
+        assert shrunk.area == pytest.approx(ratio * 10.0, rel=1e-9)
+        assert before.contains(shrunk)
+        assert defect.expected_detect is (ratio < 1)
