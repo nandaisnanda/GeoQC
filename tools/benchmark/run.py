@@ -75,6 +75,7 @@ CODE_TO_DEFECT = {
     "TOP-NO-GAP": "gap",
     # Families: one code scores several subtypes (inject.FAMILY).
     "TOP-NO-DUPLICATE": "duplicate",
+    "TOP-MINIMUM-AREA": "minimum_area",
 }
 # Road endpoint findings share one code; the audit names the case in the title.
 ENDPOINT_TITLE_TO_DEFECT = {

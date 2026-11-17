@@ -83,6 +83,15 @@ can set a `no_duplicate` rule tolerance, which compares vertex by vertex with
 `equals_exact`, but no packaged preset does. This documents behaviour; it is not a
 detection failure.
 
+## Shrinking a parcel or jittering a copy moves vertices off the precision grid
+
+The `minimum_area` injector scales a parcel about its centroid, and `duplicate_jitter`
+moves vertices by 1 cm in random directions. Both leave coordinates off bench-parcels'
+0.001 m precision grid, so each defect also draws one `TOP-PRECISION-GRID` finding (60 in
+the quick run). The ring the shrunken parcel leaves behind is at least 300 m², above the
+no_gap maximum of 1 m², so no `TOP-NO-GAP` collateral appears and the benchmark adds no
+`(minimum_area, TOP-NO-GAP)` pair.
+
 # PERFORMANCE
 
 ## jalan audit time grows close to the square of the road count
