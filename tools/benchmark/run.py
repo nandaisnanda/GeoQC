@@ -23,11 +23,13 @@ from inject import (
     DEFAULT_RATIO,
     DEFECT_TYPES,
     LAYER_OF,
-    SWEPT,
+    PROFILE_OF,
+    SPECS,
     Defect,
     NotEnoughSites,
     Site,
     apply,
+    magnitudes,
     plan,
     truth_record,
     write_truth,
@@ -53,15 +55,6 @@ from geoqc.infrastructure.gis.dataset_checks import _metric_skip_reason
 from geoqc.infrastructure.gis.profile_loading import _generic_profile, load_builtin_preset
 
 HERE = Path(__file__).parent
-# Each defect type is scored under exactly one profile.
-PROFILE_OF = {
-    "self_intersection": "generic-polygon",
-    "sliver": "generic-polygon",
-    "overlap": "generic-polygon",
-    "duplicate_vertex": "generic-polygon",
-    "undershoot": "jalan",
-    "unnoded_t_junction": "jalan",
-}
 # Findings the clean data is expected to carry: (layer, code, title).
 EXPECTED_CLEAN = frozenset(
     {
@@ -580,8 +573,15 @@ def benchmark(
                 guards[(name, target)] = (layer_audit.metric_guard, layer_audit.carriers)
             for defect_type in DEFECT_TYPES:
                 layer, name = LAYER_OF[defect_type], PROFILE_OF[defect_type]
-                for ratio in ratios if defect_type in SWEPT else (None,):
-                    geometries, defects = apply(defect_type, sites[defect_type], base[layer], ratio)
+                for ratio, magnitude in magnitudes(defect_type, ratios):
+                    geometries, defects = apply(
+                        defect_type,
+                        sites[defect_type],
+                        base[layer],
+                        magnitude,
+                        SPECS[defect_type].tolerance,
+                        current,
+                    )
                     suffix = "" if ratio is None else f"_r{ratio:g}"
                     path = folder / f"{defect_type}{suffix}.gpkg"
                     write_layers(path, {layer: geometries}, target)
