@@ -138,3 +138,42 @@ def test_gap_leaves_an_enclosed_hole_of_ratio_times_tolerance(
         (hole,) = [item for item in holes if item.intersects(pair)]
         assert hole.area == pytest.approx(ratio * 1.0, rel=1e-6)
         assert defect.expected_detect is (ratio <= 1)
+
+
+def test_duplicate_exact_appends_an_equal_copy(bench: tuple[ModuleType, ModuleType]) -> None:
+    inject, _ = bench
+    geometries, sites = _parcel_sites(bench)
+    spec = inject.SPECS["duplicate_exact"]
+
+    out, defects = inject.apply(
+        "duplicate_exact", sites["duplicate_exact"], geometries, spec.magnitude, spec.tolerance
+    )
+
+    assert len(out) == len(geometries) + len(defects)
+    for defect in defects:
+        assert out[defect.feature_index].equals(out[defect.related_index])
+        assert defect.expected_detect is True
+
+
+def test_duplicate_jitter_moves_every_vertex_by_delta(
+    bench: tuple[ModuleType, ModuleType],
+) -> None:
+    inject, _ = bench
+    geometries, sites = _parcel_sites(bench)
+    spec = inject.SPECS["duplicate_jitter"]
+
+    out, defects = inject.apply(
+        "duplicate_jitter",
+        sites["duplicate_jitter"],
+        geometries,
+        spec.magnitude,
+        spec.tolerance,
+        seed=5,
+    )
+
+    for defect in defects:
+        original, copy = out[defect.feature_index], out[defect.related_index]
+        assert copy.hausdorff_distance(original) <= spec.magnitude * 1.01
+        assert not copy.equals(original)
+        assert copy.is_valid
+        assert defect.expected_detect is False

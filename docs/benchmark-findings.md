@@ -74,6 +74,15 @@ reports these areas of 1e-17 to 1e-22 square degrees: 72 overlaps and 17 gaps in
 20-defect overlap file. Real coverages with T-vertices behave the same way after
 reprojection.
 
+## The baseline duplicate check is exact only
+
+`duplicate_exact` (an appended copy) scores 20 of 20 in both CRSs. `duplicate_jitter`
+moves every vertex of the copy by 1 cm in a random direction and scores 0 of 20, as
+expected: `TOP-NO-DUPLICATE` compares with topological equality at tolerance 0. A profile
+can set a `no_duplicate` rule tolerance, which compares vertex by vertex with
+`equals_exact`, but no packaged preset does. This documents behaviour; it is not a
+detection failure.
+
 # PERFORMANCE
 
 ## jalan audit time grows close to the square of the road count

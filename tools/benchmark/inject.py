@@ -279,6 +279,57 @@ def _gap(
     )
 
 
+def _duplicate_exact(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Append an exact copy of the parcel.
+    (index,), _ = site
+    out.append(out[index])
+    # feature_index names the original (a unique isolated site), related_index the copy.
+    return _defect(
+        "duplicate_exact",
+        "parcels",
+        index,
+        len(out) - 1,
+        magnitude=magnitude,
+        tolerance=tolerance,
+        expected=True,
+    )
+
+
+def _duplicate_jitter(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Append a copy with every vertex moved `magnitude` metres in a random direction.
+    # The baseline duplicate check compares exactly (tolerance 0): not expected to fire.
+    assert magnitude is not None and tolerance is not None
+    (index,), _ = site
+    polygon = out[index]
+    assert isinstance(polygon, Polygon)
+    ring = []
+    for x, y in list(polygon.exterior.coords)[:-1]:
+        angle = context.rng.uniform(0.0, 2 * math.pi)
+        ring.append((x + magnitude * math.cos(angle), y + magnitude * math.sin(angle)))
+    out.append(Polygon(ring))
+    return _defect(
+        "duplicate_jitter",
+        "parcels",
+        index,
+        len(out) - 1,
+        magnitude=magnitude,
+        tolerance=tolerance,
+        expected=magnitude <= tolerance,
+    )
+
+
 SPECS: dict[str, Spec] = {
     # Exact geometry check: no size.
     "self_intersection": Spec("parcels", "generic-polygon", "single", _self_intersection),
@@ -309,6 +360,20 @@ SPECS: dict[str, Spec] = {
     "undershoot": Spec("roads", "jalan", "crossing_end", _undershoot, tolerance=2.0, swept=True),
     # bench-parcels no_gap: tolerance is the MAXIMUM gap area reported (1.0 m²).
     "gap": Spec("parcels", "bench-parcels", "interior_pair", _gap, tolerance=1.0, swept=True),
+    # Baseline TOP-NO-DUPLICATE: topological equality, tolerance 0, in every profile.
+    "duplicate_exact": Spec(
+        "parcels", "bench-parcels", "single", _duplicate_exact, tolerance=0.0, magnitude=0.0
+    ),
+    # One jitter size (1 cm): with tolerance 0 there is no ratio to sweep.
+    "duplicate_jitter": Spec(
+        "parcels", "bench-parcels", "single", _duplicate_jitter, tolerance=0.0, magnitude=0.01
+    ),
+}
+# Subtypes scored by one finding code share a family; CODE_TO_DEFECT in run.py maps
+# codes to families.
+FAMILY = {
+    "duplicate_exact": "duplicate",
+    "duplicate_jitter": "duplicate",
 }
 DEFECT_TYPES = tuple(SPECS)
 LAYER_OF = {name: spec.layer for name, spec in SPECS.items()}
