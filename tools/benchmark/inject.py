@@ -353,6 +353,30 @@ def _minimum_area(
     )
 
 
+def _empty_polygon(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    (index,), _ = site
+    out[index] = Polygon()
+    return _defect("empty_polygon", "parcels", index)
+
+
+def _null_geometry(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    (index,), _ = site
+    out[index] = cast(BaseGeometry, None)
+    return _defect("null_geometry", "parcels", index)
+
+
 SPECS: dict[str, Spec] = {
     # Exact geometry check: no size.
     "self_intersection": Spec("parcels", "generic-polygon", "single", _self_intersection),
@@ -395,12 +419,17 @@ SPECS: dict[str, Spec] = {
     "minimum_area": Spec(
         "parcels", "bench-parcels", "single", _minimum_area, tolerance=10.0, swept=True
     ),
+    # GEO-EMPTY_GEOMETRY is always on: no size.
+    "empty_polygon": Spec("parcels", "bench-parcels", "single", _empty_polygon),
+    "null_geometry": Spec("parcels", "bench-parcels", "single", _null_geometry),
 }
 # Subtypes scored by one finding code share a family; CODE_TO_DEFECT in run.py maps
 # codes to families.
 FAMILY = {
     "duplicate_exact": "duplicate",
     "duplicate_jitter": "duplicate",
+    "empty_polygon": "empty",
+    "null_geometry": "empty",
 }
 DEFECT_TYPES = tuple(SPECS)
 LAYER_OF = {name: spec.layer for name, spec in SPECS.items()}

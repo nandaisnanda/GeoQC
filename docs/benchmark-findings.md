@@ -74,6 +74,25 @@ reports these areas of 1e-17 to 1e-22 square degrees: 72 overlaps and 17 gaps in
 20-defect overlap file. Real coverages with T-vertices behave the same way after
 reprojection.
 
+## A null geometry crashes the audit instead of producing a finding
+
+The `null_geometry` injector sets one parcel's geometry to None and writes it to a
+GeoPackage. Reading it back gives a missing geometry (`isna`). `audit_dataset` then raises
+under both bench-parcels and generic-polygon, in EPSG:32748 and EPSG:4326:
+
+```
+AttributeError: 'NoneType' object has no attribute 'geom_type'
+  at src/geoqc/infrastructure/gis/dataset_audit.py:136 (audit_geodataframe)
+```
+
+The user gets no findings for the file at all, so the benchmark scores 0 of 20 and
+lists the error under "Audit errors". A Polygon() (empty, not null) works:
+`GEO-EMPTY_GEOMETRY` finds 20 of 20.
+
+HYPOTHESIS: the audit assumes every row has a geometry object. Line 136 reads
+`geometry.geom_type` for the expected-type check before any geometry check runs, and
+`_require_geometry` in `finding_builders.py` would reject None with a TypeError next.
+
 ## The baseline duplicate check is exact only
 
 `duplicate_exact` (an appended copy) scores 20 of 20 in both CRSs. `duplicate_jitter`

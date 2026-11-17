@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import geopandas as gpd  # type: ignore[import-untyped]
 import pytest
 from shapely import union_all
 from shapely.geometry import Polygon, box
@@ -195,3 +196,26 @@ def test_minimum_area_shrinks_to_ratio_times_tolerance(
         assert shrunk.area == pytest.approx(ratio * 10.0, rel=1e-9)
         assert before.contains(shrunk)
         assert defect.expected_detect is (ratio < 1)
+
+
+def test_empty_and_null_geometries_survive_a_gpkg_round_trip(
+    bench: tuple[ModuleType, ModuleType], tmp_path: Path
+) -> None:
+    inject, make_clean = bench
+    geometries, sites = _parcel_sites(bench)
+
+    for defect_type, check in (
+        ("empty_polygon", lambda frame, i: frame.geometry.iloc[i].is_empty),
+        ("null_geometry", lambda frame, i: frame.geometry.isna().iloc[i]),
+    ):
+        out, defects = inject.apply(defect_type, sites[defect_type], geometries, None, None)
+        path = tmp_path / f"{defect_type}.gpkg"
+        gpd.GeoDataFrame(geometry=out, crs=make_clean.CRS).to_file(path, layer="parcels")
+        frame = gpd.read_file(path, layer="parcels")
+
+        assert len(frame) == len(geometries)
+        for defect in defects:
+            assert check(frame, defect.feature_index)
+            assert defect.expected_detect is True
+        untouched = set(range(len(geometries))) - {item.feature_index for item in defects}
+        assert not frame.geometry.isna().iloc[sorted(untouched)].any()
