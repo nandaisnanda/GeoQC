@@ -253,6 +253,32 @@ def _undershoot(
     )
 
 
+def _gap(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Pull A back from its shared edge with B by w = area / edge length. Both parcels are
+    # interior, so the parcels around them close the strip: an enclosed gap of exactly
+    # `magnitude` square metres. A flat cap keeps A rectangular (no arc vertices).
+    assert magnitude is not None and tolerance is not None
+    (a, b), _ = site
+    edge = out[a].intersection(out[b])
+    width = magnitude / edge.length
+    out[a] = out[a].difference(edge.buffer(width, cap_style="flat"))
+    return _defect(
+        "gap",
+        "parcels",
+        a,
+        b,
+        magnitude=magnitude,
+        tolerance=tolerance,
+        expected=0 < magnitude <= tolerance,
+    )
+
+
 SPECS: dict[str, Spec] = {
     # Exact geometry check: no size.
     "self_intersection": Spec("parcels", "generic-polygon", "single", _self_intersection),
@@ -281,6 +307,8 @@ SPECS: dict[str, Spec] = {
     # jalan: no_overshoot_undershoot tolerance, also the radius _merge_road_endpoints uses
     # to title an unconnected end "Possible undershoot".
     "undershoot": Spec("roads", "jalan", "crossing_end", _undershoot, tolerance=2.0, swept=True),
+    # bench-parcels no_gap: tolerance is the MAXIMUM gap area reported (1.0 m²).
+    "gap": Spec("parcels", "bench-parcels", "interior_pair", _gap, tolerance=1.0, swept=True),
 }
 DEFECT_TYPES = tuple(SPECS)
 LAYER_OF = {name: spec.layer for name, spec in SPECS.items()}

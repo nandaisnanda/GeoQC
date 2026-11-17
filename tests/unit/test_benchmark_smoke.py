@@ -33,6 +33,7 @@ def test_small_benchmark_finds_every_bowtie(
     assert "| self_intersection | parcels | 2 | 2 | 100% |" in report
     with (tmp_path / "truth.csv").open(encoding="utf-8") as handle:
         truth = list(csv.DictReader(handle))
-    assert len(truth) == 12
+    # One truth row per injected defect: per_type for every defect type.
+    assert len(truth) == 2 * len(run.DEFECT_TYPES)
     keys = [(row["layer"], row["feature_index"]) for row in truth]
     assert len(set(keys)) == len(keys)

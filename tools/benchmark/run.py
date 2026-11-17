@@ -71,6 +71,7 @@ CODE_TO_DEFECT = {
     "TOP-NO-OVERLAP": "overlap",
     "GEO-DUPLICATE_VERTEX": "duplicate_vertex",
     "TOP-NO-OVERSHOOT-UNDERSHOOT": "overshoot",
+    "TOP-NO-GAP": "gap",
 }
 # Road endpoint findings share one code; the audit names the case in the title.
 ENDPOINT_TITLE_TO_DEFECT = {
