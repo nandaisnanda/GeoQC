@@ -76,6 +76,7 @@ CODE_TO_DEFECT = {
     # Families: one code scores several subtypes (inject.FAMILY).
     "TOP-NO-DUPLICATE": "duplicate",
     "TOP-MINIMUM-AREA": "minimum_area",
+    "GEO-EMPTY_GEOMETRY": "empty",
 }
 # Road endpoint findings share one code; the audit names the case in the title.
 ENDPOINT_TITLE_TO_DEFECT = {
@@ -115,6 +116,7 @@ CSV_COLUMNS = (
     "collateral",
     "guard_skipped",
     "guard_reported",
+    "audit_error",
 )
 GUARD_CARRIER = "checks[topology].status=skipped"
 QUICK_PER_TYPE, QUICK_SEEDS, QUICK_RATIOS = 20, 1, (0.5, 2.0)
@@ -172,6 +174,8 @@ class Row:
     collateral: int
     guard_skipped: bool
     guard_reported: bool
+    # Set when audit_dataset raised on the defect file: nothing was reported, found = 0.
+    audit_error: str = ""
 
     @property
     def recall(self) -> float | None:
@@ -204,6 +208,7 @@ class Row:
             "collateral": self.collateral,
             "guard_skipped": self.guard_skipped,
             "guard_reported": self.guard_reported,
+            "audit_error": self.audit_error,
         }
 
 
@@ -387,6 +392,35 @@ def score_file(
     return row, split.unattributed
 
 
+def error_row(
+    defect_type: str,
+    defects: Sequence[Defect],
+    crs: str,
+    seed: int,
+    ratio_r: float | None,
+    error: Exception,
+) -> Row:
+    """A row for a defect file the audit crashed on: the user gets no findings at all."""
+    return Row(
+        defect_type=defect_type,
+        profile=PROFILE_OF[defect_type],
+        layer=LAYER_OF[defect_type],
+        crs=crs,
+        ratio_r=ratio_r,
+        expected_detect=all(item.expected_detect for item in defects),
+        seed=seed,
+        injected=len(defects),
+        found=0,
+        fp_clean=0,
+        fp_clean_unexpected=0,
+        fp_defects=0,
+        collateral=0,
+        guard_skipped=False,
+        guard_reported=False,
+        audit_error=f"{type(error).__name__}: {error}",
+    )
+
+
 BaselineRow = tuple[str, str, str, int, str, str, int, bool]
 """(profile, layer, crs, seed, code, title, count, expected_clean)."""
 
@@ -419,6 +453,7 @@ def aggregate(rows: Sequence[Row]) -> list[Row]:
             collateral=sum(item.collateral for item in members),
             guard_skipped=all(item.guard_skipped for item in members),
             guard_reported=all(item.guard_reported for item in members),
+            audit_error=next((item.audit_error for item in members if item.audit_error), ""),
         )
         for members in groups.values()
     ]
@@ -507,6 +542,21 @@ def render(
         "fp_clean: findings of that type on the clean data. fp_defects: unmatched findings",
         "of that type on the defect data. collateral: unmatched findings on a defect's",
         "features that the defect is allowed to cause (scoring.ALLOWED_COLLATERAL).",
+        "",
+        "## Audit errors",
+        "",
+        "Defect files on which audit_dataset raised (scored as found = 0).",
+        "",
+        "| defect type | crs | error |",
+        "| --- | --- | --- |",
+    ]
+    errors = sorted(
+        {(row.defect_type, row.crs, row.audit_error) for row in rows if row.audit_error}
+    )
+    lines += [f"| {kind} | {crs} | {error} |" for kind, crs, error in errors]
+    if not errors:
+        lines.append("| - | - | none |")
+    lines += [
         "",
         "## Metric-CRS guard",
         "",
@@ -605,7 +655,13 @@ def benchmark(
                     path = folder / f"{defect_type}{suffix}.gpkg"
                     write_layers(path, {layer: geometries}, target)
                     print(f"auditing {path.relative_to(out)}", file=sys.stderr, flush=True)
-                    audited = audit(path, target, [name])[name]
+                    try:
+                        audited = audit(path, target, [name])[name]
+                    except Exception as error:  # noqa: BLE001 - a crash is a result here
+                        row = error_row(defect_type, defects, target, current, ratio, error)
+                        rows.append(row)
+                        truth += [truth_record(item, target, current) for item in defects]
+                        continue
                     row, extra = score_file(
                         defect_type,
                         audited,
