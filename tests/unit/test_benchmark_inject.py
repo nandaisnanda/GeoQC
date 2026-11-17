@@ -307,3 +307,30 @@ def test_precision_grid_moves_exactly_one_vertex_off_the_grid(
         assert all(deviation(point) <= 1e-9 for point in ring if point != off[0])
         assert out[defect.feature_index].is_valid
         assert defect.expected_detect is True
+
+
+@pytest.mark.parametrize("ratio", [0.5, 0.9, 1.1, 2, 10])
+def test_overshoot_extends_the_stem_past_the_through_road(
+    bench: tuple[ModuleType, ModuleType], ratio: float
+) -> None:
+    inject, make_clean = bench
+    parcels, roads = make_clean.build(1600, 6)
+    lines = list(roads.geometry)
+    sites = inject.plan(list(parcels.geometry), lines, 2, seed=1)
+    ((_, magnitude),) = inject.magnitudes("overshoot", [ratio])
+
+    out, defects = inject.apply("overshoot", sites["overshoot"], lines, magnitude, 2.0)
+
+    assert len(out) == len(lines)
+    for defect in defects:
+        stem, through = out[defect.feature_index], out[defect.related_index]
+        crossing = stem.intersection(through)
+        assert crossing.geom_type == "Point"
+        # Along the stem, the crossing lies s short of the nearer (moved) end.
+        along = stem.project(crossing)
+        assert min(along, stem.length - along) == pytest.approx(ratio * 2.0, abs=1e-9)
+        assert stem.length - lines[defect.feature_index].length == pytest.approx(
+            ratio * 2.0, abs=1e-9
+        )
+        assert crossing.distance(stem.boundary) == pytest.approx(ratio * 2.0, abs=1e-9)
+        assert defect.expected_detect is (ratio < 1)

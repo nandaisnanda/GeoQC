@@ -42,6 +42,10 @@ ALLOWED_COLLATERAL: frozenset[tuple[str, str]] = frozenset(
         ("duplicate_segment", "TOP-NO-DUPLICATE"),
         ("undershoot", "overshoot"),
         ("overshoot", "undershoot"),
+        # The overshooting stem crosses the through road without a node, and its moved
+        # end no longer meets any segment end.
+        ("overshoot", "ROAD-UNNODED_INTERSECTION"),
+        ("overshoot", "TOP-NO-DANGLES"),
         ("self_intersection", "TOP-NO-GAP"),
         ("unnoded_t_junction", "ROAD-UNNODED_INTERSECTION"),
         # The spike's two base vertices cannot sit on the 0.001 m grid: their spacing
