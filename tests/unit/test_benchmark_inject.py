@@ -6,7 +6,8 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from shapely.geometry import box
+from shapely import union_all
+from shapely.geometry import Polygon, box
 
 BENCHMARK = Path(__file__).parents[2] / "tools" / "benchmark"
 
@@ -69,7 +70,7 @@ def test_undershoot_magnitude_follows_the_ratio(
     bench: tuple[ModuleType, ModuleType], ratio: float, expected: bool
 ) -> None:
     inject, make_clean = bench
-    parcels, roads = make_clean.build(100, 6)
+    parcels, roads = make_clean.build(1600, 6)
     lines = list(roads.geometry)
     sites = inject.plan(list(parcels.geometry), lines, 2, seed=1)
 
@@ -92,7 +93,7 @@ def test_t_junction_keeps_every_feature_and_unnodes_the_stem(
     bench: tuple[ModuleType, ModuleType],
 ) -> None:
     inject, make_clean = bench
-    parcels, roads = make_clean.build(100, 6)
+    parcels, roads = make_clean.build(1600, 6)
     lines = list(roads.geometry)
     sites = inject.plan(list(parcels.geometry), lines, 2, seed=1)
 
@@ -105,3 +106,35 @@ def test_t_junction_keeps_every_feature_and_unnodes_the_stem(
         stem, through = out[defect.feature_index], out[defect.related_index]
         assert stem.distance(through) < 1e-9
         assert stem.distance(through.boundary) > 0.5
+
+
+def _parcel_sites(
+    bench: tuple[ModuleType, ModuleType], per_type: int = 3
+) -> tuple[list[object], dict[str, list[object]]]:
+    inject, make_clean = bench
+    parcels, roads = make_clean.build(1600, 6)
+    geometries = list(parcels.geometry)
+    return geometries, inject.plan(geometries, list(roads.geometry), per_type, seed=5)
+
+
+@pytest.mark.parametrize("ratio", [0.5, 0.9, 1.1, 2, 10])
+def test_gap_leaves_an_enclosed_hole_of_ratio_times_tolerance(
+    bench: tuple[ModuleType, ModuleType], ratio: float
+) -> None:
+    inject, _ = bench
+    geometries, sites = _parcel_sites(bench)
+    ((_, magnitude),) = inject.magnitudes("gap", [ratio])
+
+    out, defects = inject.apply("gap", sites["gap"], geometries, magnitude, 1.0)
+
+    holes = [
+        Polygon(ring)
+        for part in getattr(union_all(out), "geoms", [union_all(out)])
+        for ring in part.interiors
+    ]
+    assert len(holes) == len(defects)
+    for defect in defects:
+        pair = union_all([out[defect.feature_index], out[defect.related_index]])
+        (hole,) = [item for item in holes if item.intersects(pair)]
+        assert hole.area == pytest.approx(ratio * 1.0, rel=1e-6)
+        assert defect.expected_detect is (ratio <= 1)
