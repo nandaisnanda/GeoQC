@@ -44,6 +44,9 @@ ALLOWED_COLLATERAL: frozenset[tuple[str, str]] = frozenset(
         ("overshoot", "undershoot"),
         ("self_intersection", "TOP-NO-GAP"),
         ("unnoded_t_junction", "ROAD-UNNODED_INTERSECTION"),
+        # The spike's two base vertices cannot sit on the 0.001 m grid: their spacing
+        # fixes the apex angle exactly.
+        ("spike", "TOP-PRECISION-GRID"),
     }
 )
 LOCATION_BUFFER = 0.5

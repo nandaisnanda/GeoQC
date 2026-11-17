@@ -8,7 +8,7 @@ from types import ModuleType
 import geopandas as gpd  # type: ignore[import-untyped]
 import pytest
 from shapely import union_all
-from shapely.geometry import Polygon, box
+from shapely.geometry import Point, Polygon, box
 
 BENCHMARK = Path(__file__).parents[2] / "tools" / "benchmark"
 
@@ -219,3 +219,38 @@ def test_empty_and_null_geometries_survive_a_gpkg_round_trip(
             assert defect.expected_detect is True
         untouched = set(range(len(geometries))) - {item.feature_index for item in defects}
         assert not frame.geometry.isna().iloc[sorted(untouched)].any()
+
+
+@pytest.mark.parametrize("ratio", [0.5, 0.9, 1.1, 2])
+def test_spike_apex_angle_is_ratio_times_minimum_angle(
+    bench: tuple[ModuleType, ModuleType], ratio: float
+) -> None:
+    inject, _ = bench
+    geometries, sites = _parcel_sites(bench)
+    ((_, magnitude),) = inject.magnitudes("spike", [ratio])
+
+    out, defects = inject.apply("spike", sites["spike"], geometries, magnitude, 10.0)
+
+    for defect in defects:
+        spiked, before = out[defect.feature_index], geometries[defect.feature_index]
+        (apex,) = [
+            point for point in spiked.exterior.coords[:-1] if not before.covers(Point(point))
+        ]
+        ring = list(spiked.exterior.coords[:-1])
+        at = ring.index(apex)
+        (ax, ay), (bx, by) = ring[at - 1], ring[(at + 1) % len(ring)]
+        first, second = (ax - apex[0], ay - apex[1]), (bx - apex[0], by - apex[1])
+        angle = math.atan2(
+            abs(first[0] * second[1] - first[1] * second[0]),
+            first[0] * second[0] + first[1] * second[1],
+        )
+        assert angle == pytest.approx(math.radians(ratio * 10.0), abs=1e-6)
+        assert spiked.is_valid
+        assert geometries[defect.related_index].contains(Point(apex))
+        assert defect.expected_detect is (ratio < 1)
+
+
+def test_spike_sweep_stops_at_ratio_two(bench: tuple[ModuleType, ModuleType]) -> None:
+    inject, _ = bench
+
+    assert [ratio for ratio, _ in inject.magnitudes("spike", [0.5, 2, 10])] == [0.5, 2]
