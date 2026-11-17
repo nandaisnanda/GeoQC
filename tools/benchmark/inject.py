@@ -32,6 +32,8 @@ SLIVER_COMPACTNESS = 0.05
 T_JUNCTION_SHIFT = 10.0
 # Clean parcel coordinates sit on this grid (bench-parcels precision_grid size, metres).
 GRID = 0.001
+# The precision_grid defect moves a vertex this far off the grid (metres).
+OFF_GRID_SHIFT = 0.0003
 # The spike's apex sits this far outside the parcel edge.
 SPIKE_LENGTH = 2.0
 CSV_COLUMNS = (
@@ -456,6 +458,24 @@ def _min_vertex_distance(
     )
 
 
+def _precision_grid(
+    out: list[BaseGeometry],
+    site: Site,
+    magnitude: float | None,
+    tolerance: float | None,
+    context: Context,
+) -> Defect:
+    # Move the south-west corner `magnitude` metres west, off the grid. Moving outward
+    # leaves a 0.003 m2 overlap with the west neighbour and no gap.
+    assert magnitude is not None and tolerance is not None
+    (index,), _ = site
+    x0, y0, x1, y1 = out[index].bounds
+    out[index] = Polygon([(x1, y0), (x1, y1), (x0, y1), (x0 - magnitude, y0)])
+    return _defect(
+        "precision_grid", "parcels", index, magnitude=magnitude, tolerance=tolerance, expected=True
+    )
+
+
 SPECS: dict[str, Spec] = {
     # Exact geometry check: no size.
     "self_intersection": Spec("parcels", "generic-polygon", "single", _self_intersection),
@@ -508,6 +528,15 @@ SPECS: dict[str, Spec] = {
     # bench-parcels minimum_vertex_distance: 0.05 m; magnitude is the vertex spacing.
     "min_vertex_distance": Spec(
         "parcels", "bench-parcels", "single", _min_vertex_distance, tolerance=0.05, swept=True
+    ),
+    # bench-parcels precision_grid: 0.001 m grid, deviation tolerance 1e-9. One magnitude.
+    "precision_grid": Spec(
+        "parcels",
+        "bench-parcels",
+        "single",
+        _precision_grid,
+        tolerance=1e-9,
+        magnitude=OFF_GRID_SHIFT,
     ),
 }
 # Subtypes scored by one finding code share a family; CODE_TO_DEFECT in run.py maps
