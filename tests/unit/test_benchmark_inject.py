@@ -198,6 +198,14 @@ def test_minimum_area_shrinks_to_ratio_times_tolerance(
         assert defect.expected_detect is (ratio < 1)
 
 
+def _is_empty_at(frame: gpd.GeoDataFrame, index: int) -> bool:
+    return bool(frame.geometry.iloc[index].is_empty)
+
+
+def _is_null_at(frame: gpd.GeoDataFrame, index: int) -> bool:
+    return bool(frame.geometry.isna().iloc[index])
+
+
 def test_empty_and_null_geometries_survive_a_gpkg_round_trip(
     bench: tuple[ModuleType, ModuleType], tmp_path: Path
 ) -> None:
@@ -205,8 +213,8 @@ def test_empty_and_null_geometries_survive_a_gpkg_round_trip(
     geometries, sites = _parcel_sites(bench)
 
     for defect_type, check in (
-        ("empty_polygon", lambda frame, i: frame.geometry.iloc[i].is_empty),
-        ("null_geometry", lambda frame, i: frame.geometry.isna().iloc[i]),
+        ("empty_polygon", _is_empty_at),
+        ("null_geometry", _is_null_at),
     ):
         out, defects = inject.apply(defect_type, sites[defect_type], geometries, None, None)
         path = tmp_path / f"{defect_type}.gpkg"
