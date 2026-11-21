@@ -40,6 +40,7 @@ from geoqc.application.services import BatchProcessor
 from geoqc.domain.models import DatasetAuditResult, RepairStatus
 from geoqc.domain.models.spatial_intelligence import RoadNetworkRepairConfig
 from geoqc.domain.rules import Severity
+from geoqc.infrastructure.gis.dataset_audit import _SUPPORTED_SUFFIXES
 from geoqc.infrastructure.gis.dataset_checks import MISSING_CRS_MESSAGE
 from geoqc.infrastructure.gis.impact import ImpactSummary, load_impact
 from geoqc.infrastructure.gis.parallel_audit import (
@@ -170,7 +171,30 @@ def _echo_skipped(skipped: list[str]) -> None:
         typer.echo(f"Skipped {len(skipped)} unsupported file(s): {', '.join(skipped)}")
 
 
-def _echo_audit_item(label: str | Path, engine: str, audit_result: DatasetAuditResult) -> bool:
+def _skips_road_checks(profile: QualityProfile | None) -> bool:
+    """Return True when a profile runs line geometry checks without road checks."""
+    return profile is not None and profile.name == "generic-line"
+
+
+def _pass_label(roads_skipped: bool) -> str:
+    return "PASS (road checks skipped)" if roads_skipped else "PASS"
+
+
+def _road_checks_skipped(source: Path, layer: str | None) -> bool:
+    """Return True for a line layer audited without road checks (same rule as check)."""
+    try:
+        geometry_type = read_info(source, layer=layer).get("geometry_type")
+    except (DataSourceError, OSError, ValueError):
+        return False
+    return _skips_road_checks(_generic_profile(geometry_type))
+
+
+def _echo_audit_item(
+    label: str | Path,
+    engine: str,
+    audit_result: DatasetAuditResult,
+    roads_skipped: bool = False,
+) -> bool:
     """Print one audit result and return whether it passed the quality gate."""
     invalid_count = len([issue for issue in audit_result.issues if issue.category == "geometry"])
     report_suffix = f" status={audit_result.status.value} issues={audit_result.issue_count}"
@@ -182,11 +206,11 @@ def _echo_audit_item(label: str | Path, engine: str, audit_result: DatasetAuditR
         f"features={audit_result.feature_count} "
         f"invalid={invalid_count}{report_suffix}"
     )
-    typer.echo(f"QUALITY {'PASS' if quality_passed else 'FAIL'} {label}")
+    typer.echo(f"QUALITY {_pass_label(roads_skipped) if quality_passed else 'FAIL'} {label}")
     return quality_passed
 
 
-def _echo_verdict(result: DatasetAuditResult, passed: bool) -> None:
+def _echo_verdict(result: DatasetAuditResult, passed: bool, roads_skipped: bool = False) -> None:
     """Print why the check passed or failed, then the most frequent issue codes."""
     counts = Counter(issue.severity for issue in result.issues)
     parts = [
@@ -195,7 +219,7 @@ def _echo_verdict(result: DatasetAuditResult, passed: bool) -> None:
         if counts[level]
     ]
     if passed:
-        typer.echo("PASS")
+        typer.echo(_pass_label(roads_skipped))
     else:
         typer.echo(f"FAIL: {', '.join(parts) or 'quality gate not met'}")
     affected = {
@@ -243,7 +267,7 @@ def _auto_profile(source: Path, layer: str | None) -> QualityProfile:
     )
     target = source.name if layer is None else f"{source.name}:{layer}"
     typer.echo(f"Preset: {profile.name} (geometry type {geometry_type or 'unknown'} in {target})")
-    if profile.name == "generic-line":
+    if _skips_road_checks(profile):
         # Unknown lines may be rivers or contours: run geometry checks only.
         typer.echo("Road network checks off; use --preset jalan for roads.")
         profile = replace(profile, preset=None)
@@ -297,6 +321,7 @@ def _write_check_outputs(
     overwrite_issues: bool,
     overwrite_report: bool,
     impact: ImpactSummary | None = None,
+    road_checks_skipped: bool = False,
 ) -> list[str]:
     """Write the issue GeoPackage and report, returning the lines to print."""
     lines = []
@@ -308,7 +333,13 @@ def _write_check_outputs(
         lines.append(f"Issue layers: {issues.resolve()}")
     if report is not None:
         try:
-            write_audit_report(result, report, overwrite=overwrite_report, impact=impact)
+            write_audit_report(
+                result,
+                report,
+                overwrite=overwrite_report,
+                impact=impact,
+                road_checks_skipped=road_checks_skipped,
+            )
         except ImportError:
             lines.append(_REPORT_HINT)
         else:
@@ -412,10 +443,15 @@ def audit(
     if len(sources) == 1 and (outputs_requested or profile is not None or layer is not None):
         try:
             quality_result = run_dataset_audit(sources[0], layer=layer, profile=profile)
-            if report is not None:
-                quality_result.to_html(report, overwrite=overwrite)
-            if json_output is not None:
-                quality_result.to_json(json_output, overwrite=overwrite)
+            roads_skipped = profile is None and _road_checks_skipped(sources[0], layer)
+            for target in (report, json_output):
+                if target is not None:
+                    write_audit_report(
+                        quality_result,
+                        target,
+                        overwrite=overwrite,
+                        road_checks_skipped=roads_skipped,
+                    )
             if findings is not None:
                 quality_result.write_findings(findings, overwrite=overwrite)
         except (
@@ -433,7 +469,7 @@ def audit(
             f"PROCESSED {sources[0]}: features={quality_result.feature_count} "
             f"issues={len(quality_result.issues)} score={quality_result.quality_score:.2f}"
         )
-        typer.echo(f"QUALITY {'PASS' if passed else 'FAIL'}")
+        typer.echo(f"QUALITY {_pass_label(roads_skipped) if passed else 'FAIL'}")
         _echo_skipped(skipped)
         if not passed:
             raise typer.Exit(code=1)
@@ -469,7 +505,12 @@ def audit(
         if item.value is None:
             typer.echo(f"FAILED {item.source}: {item.error}")
             continue
-        passed = _echo_audit_item(item.source, item.value.decision.engine, item.value.result)
+        passed = _echo_audit_item(
+            item.source,
+            item.value.decision.engine,
+            item.value.result,
+            _road_checks_skipped(Path(item.source), None),
+        )
         quality_failed = quality_failed or not passed
     layer_total = layer_failed = 0
     for source, layer_names in layered.items():
@@ -482,7 +523,12 @@ def audit(
                 typer.echo(f"FAILED {label}: {type(error).__name__}: {error}")
                 layer_failed += 1
                 continue
-            passed = _echo_audit_item(label, layer_result.metadata.engine, layer_result)
+            passed = _echo_audit_item(
+                label,
+                layer_result.metadata.engine,
+                layer_result,
+                _road_checks_skipped(source, name),
+            )
             quality_failed = quality_failed or not passed
     typer.echo(
         f"Audit complete: total={result.total + layer_total} "
@@ -589,6 +635,8 @@ def check_dataset(
         stacklevel=2,
     )
     try:
+        if source.is_file() and source.suffix.casefold() not in _SUPPORTED_SUFFIXES:
+            raise ValueError(f"unsupported dataset format: {source.suffix}")
         profile: QualityProfile | None = None
         if profile_path is not None:
             profile = load_quality_profile(profile_path)
@@ -634,6 +682,7 @@ def check_dataset(
                         overwrite_issues=True,
                         overwrite_report=True,
                         impact=layer_impact,
+                        road_checks_skipped=_skips_road_checks(layer_profile),
                     )
                 )
             except (DataSourceError, OSError, TypeError, ValueError) as error:
@@ -643,7 +692,7 @@ def check_dataset(
             layer_passed = layer_result.passes(policy)
             _echo_unmatched_rules(layer_profile, name)
             typer.echo(f"Layer: {name}")
-            _echo_verdict(layer_result, layer_passed)
+            _echo_verdict(layer_result, layer_passed, _skips_road_checks(layer_profile))
             for line in layer_impact.cli_lines():
                 typer.echo(line)
             for line in written:
@@ -667,12 +716,13 @@ def check_dataset(
             overwrite_issues=overwrite or issues is None,
             overwrite_report=report is None,
             impact=impact,
+            road_checks_skipped=_skips_road_checks(profile),
         )
     except (FileExistsError, FileNotFoundError, OSError, TypeError, ValueError) as error:
         typer.echo(f"Error: {error}", err=True)
         raise typer.Exit(code=2) from error
 
-    _echo_verdict(result, result.passes(policy))
+    _echo_verdict(result, result.passes(policy), _skips_road_checks(profile))
     for line in impact.cli_lines():
         typer.echo(line)
     _echo_missing_crs(result)

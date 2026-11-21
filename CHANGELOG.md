@@ -22,6 +22,15 @@ All notable changes to GeoQC are documented here. This project follows
   "features with errors" and do not fail the quality gate.
 - The CI workflow now runs on Ubuntu and Windows (Python 3.12 and 3.13).
 
+### Fixed
+
+- `geoqc check` and `geoqc audit` no longer report a bare PASS on line layers
+  run without road checks. The terminal prints `PASS (road checks skipped)`,
+  the JSON report adds `"road_checks_skipped": true`, and the HTML report shows
+  a note to rerun with `--preset jalan`.
+- `geoqc check` on an unsupported format such as `.csv` prints only the
+  format error, without the preceding `Preset:` line.
+
 ## [0.2.0] - 2026-10-30
 
 ### Highlights

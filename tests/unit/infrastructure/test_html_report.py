@@ -93,3 +93,13 @@ def test_write_creates_parent_directories_and_utf8_file(tmp_path: Path) -> None:
     assert result == destination
     assert destination.is_file()
     assert "GeoQC quality report" in destination.read_text(encoding="utf-8")
+
+
+def test_render_shows_score_notice_when_given() -> None:
+    note = "Road network checks skipped — rerun with --preset jalan for road layers."
+    html = HtmlReportRenderer().render(_report(), notice=note)
+
+    assert 'class="score-notice"' in html
+    assert "Road network checks skipped" in html
+    assert "--preset jalan" in html
+    assert 'class="score-notice"' not in HtmlReportRenderer().render(_report())

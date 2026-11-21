@@ -25,3 +25,32 @@ def test_sample_roads_report_disconnected_segment() -> None:
 
     dead_ends = {i.feature_index for i in result.issues if i.code == "ROAD-DEAD_END"}
     assert dead_ends == {1, 3}
+
+
+def test_check_roads_without_preset_does_not_claim_bare_pass() -> None:
+    from typer.testing import CliRunner
+
+    from geoqc.interfaces.cli.main import app
+
+    result = CliRunner().invoke(app, ["check", str(SAMPLE), "--layer", "roads", "--no-output"])
+    lines = [line.strip() for line in result.output.splitlines()]
+    assert "PASS" not in lines
+    assert "PASS (road checks skipped)" in lines
+    assert "--preset jalan" in result.output
+
+
+def test_check_roads_without_preset_flags_skipped_road_checks_in_json() -> None:
+    import json
+    import tempfile
+
+    from typer.testing import CliRunner
+
+    from geoqc.interfaces.cli.main import app
+
+    with tempfile.TemporaryDirectory() as folder:
+        report = Path(folder) / "roads.json"
+        args = ["check", str(SAMPLE), "--layer", "roads", "--no-output", "--report", str(report)]
+        CliRunner().invoke(app, args)
+        payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["road_checks_skipped"] is True
+    assert "quality_score" in payload
