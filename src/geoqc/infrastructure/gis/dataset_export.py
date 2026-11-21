@@ -69,12 +69,18 @@ def write_issue_layers(
     return path
 
 
+ROAD_CHECKS_SKIPPED_NOTE = (
+    "Road network checks skipped — rerun with --preset jalan for road layers."
+)
+
+
 def write_audit_report(
     result: DatasetAuditResult,
     destination: str | Path,
     *,
     overwrite: bool = False,
     impact: ImpactSummary | None = None,
+    road_checks_skipped: bool = False,
 ) -> Path:
     """Write JSON or self-contained HTML directly from a unified audit result."""
     path = Path(destination)
@@ -85,6 +91,8 @@ def write_audit_report(
         payload = result.to_dict()
         if impact_data is not None:
             payload["impact"] = impact_data
+        if road_checks_skipped:
+            payload["road_checks_skipped"] = True
         _atomic_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
         return path
     if path.suffix.casefold() == ".html":
@@ -93,7 +101,10 @@ def write_audit_report(
 
         temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
         try:
-            HtmlReportRenderer().write(build_quality_report(result), temporary, impact=impact_data)
+            notice = ROAD_CHECKS_SKIPPED_NOTE if road_checks_skipped else None
+            HtmlReportRenderer().write(
+                build_quality_report(result), temporary, impact=impact_data, notice=notice
+            )
             temporary.replace(path)
         finally:
             if temporary.exists():

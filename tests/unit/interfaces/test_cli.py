@@ -9,7 +9,7 @@ from pathlib import Path
 import geopandas as gpd  # type: ignore[import-untyped]
 import pytest
 from pytest import MonkeyPatch
-from shapely.geometry import Point
+from shapely.geometry import LineString, Point
 from typer.testing import CliRunner
 
 from geoqc.application.engine_selection import DatasetProfile, EngineDecision
@@ -93,6 +93,45 @@ def test_audit_folder_reports_each_geopackage_layer(
     assert f"QUALITY PASS {source.resolve()} layer=second" in result.stdout
     assert "total=2 succeeded=2 failed=0" in result.stdout
     assert result.exit_code == 0
+
+
+def test_audit_line_layer_without_profile_flags_road_checks_skipped(tmp_path: Path) -> None:
+    source = tmp_path / "lines.gpkg"
+    gpd.GeoDataFrame(
+        geometry=[LineString([(0, 0), (10, 0)]), LineString([(0, 5), (10, 5)])],
+        crs="EPSG:32748",
+    ).to_file(source, layer="roads")
+    report = tmp_path / "audit.json"
+
+    result = runner.invoke(app, ["audit", str(source), "--layer", "roads", "--json", str(report)])
+
+    assert result.exit_code == 0, result.stdout
+    assert "QUALITY PASS (road checks skipped)" in result.stdout
+    assert json.loads(report.read_text(encoding="utf-8"))["road_checks_skipped"] is True
+
+
+def test_audit_line_layer_html_report_shows_road_checks_skipped_note(tmp_path: Path) -> None:
+    source = tmp_path / "lines.gpkg"
+    gpd.GeoDataFrame(geometry=[LineString([(0, 0), (10, 0)])], crs="EPSG:32748").to_file(
+        source, layer="roads"
+    )
+    report = tmp_path / "audit.html"
+
+    result = runner.invoke(app, ["audit", str(source), "--report", str(report)])
+
+    assert result.exit_code == 0, result.stdout
+    assert "Road network checks skipped" in report.read_text(encoding="utf-8")
+
+
+def test_check_unsupported_format_prints_only_the_error(tmp_path: Path) -> None:
+    source = tmp_path / "a.csv"
+    source.write_text("a,b\n1,2\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["check", str(source)])
+
+    assert result.exit_code == 2
+    assert "Preset:" not in result.output
+    assert "Error: unsupported dataset format: .csv" in result.output
 
 
 def test_dataset_issue_survives_pickling() -> None:
