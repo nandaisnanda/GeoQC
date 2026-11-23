@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from geoqc.domain.rules import Severity
+from geoqc.domain.rules import FindingKind, Provenance, Severity
+from geoqc.domain.rules.models import BUILT_IN_PROVENANCE, DEFAULT_RULE_VERSION, is_semver
 
 if TYPE_CHECKING:
     from geoqc.domain.models.quality_workflow import DatasetAuditResult
@@ -59,6 +60,9 @@ class AuditIssue:
     severity: Severity
     recommendation: str
     feature_indices: tuple[int, ...] = ()
+    kind: FindingKind = FindingKind.RULE_VIOLATION
+    rule_version: str = DEFAULT_RULE_VERSION
+    provenance: Provenance = BUILT_IN_PROVENANCE
 
     def __post_init__(self) -> None:
         warnings.warn(
@@ -71,6 +75,8 @@ class AuditIssue:
                 raise ValueError(f"{name} must not be empty")
         if any(index < 0 for index in self.feature_indices):
             raise ValueError("feature indices must be non-negative")
+        if not is_semver(self.rule_version):
+            raise ValueError("rule_version must be a valid semver string")
 
     def to_dict(self) -> dict[str, object]:
         return {

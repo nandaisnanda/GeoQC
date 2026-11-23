@@ -1,9 +1,19 @@
 """Immutable value objects shared by rules and the rule engine."""
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from math import isfinite
 from types import MappingProxyType
+
+_IDENT = r"(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
+_SEMVER = re.compile(
+    r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    rf"(?:-{_IDENT}(?:\.{_IDENT})*)?"
+    r"(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?"
+)
+DEFAULT_RULE_VERSION = "1.0.0"
 
 type Scalar = str | int | float | bool | None
 type Metadata = Mapping[str, Scalar]
@@ -28,12 +38,81 @@ class RuleCategory(StrEnum):
     TOPOLOGY = "topology"
 
 
+class FindingKind(StrEnum):
+    """How a finding was established, so readers can weigh its certainty."""
+
+    RULE_VIOLATION = "rule_violation"
+    STATISTICAL_ANOMALY = "statistical_anomaly"
+    AI_SUSPICION = "ai_suspicion"
+    CONTEXTUAL_INCONSISTENCY = "contextual_inconsistency"
+    CONFIRMED_ERROR = "confirmed_error"
+
+
+class ProvenanceOrigin(StrEnum):
+    """Where a rule definition comes from."""
+
+    BUILT_IN = "built-in"
+    PRESET = "preset"
+    PROFILE = "profile"
+
+
 class ResultStatus(StrEnum):
     """Execution outcome for a single rule."""
 
     PASSED = "passed"
     FAILED = "failed"
     ERROR = "error"
+
+
+def is_semver(value: str) -> bool:
+    """Return whether ``value`` is a valid Semantic Versioning 2.0.0 string."""
+    return _SEMVER.fullmatch(value) is not None
+
+
+@dataclass(frozen=True, slots=True)
+class Tolerance:
+    """Numeric threshold a rule applies, always paired with its unit."""
+
+    value: float
+    unit: str
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.value) or self.value < 0:
+            raise ValueError("Tolerance value must be finite and non-negative")
+        if not self.unit.strip():
+            raise ValueError("Tolerance unit must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
+class Provenance:
+    """Origin of a rule definition and the source that justifies it."""
+
+    origin: ProvenanceOrigin
+    source: str
+
+    def __post_init__(self) -> None:
+        if not self.source.strip():
+            raise ValueError("Provenance source must not be empty")
+
+
+BUILT_IN_PROVENANCE = Provenance(ProvenanceOrigin.BUILT_IN, "geoqc")
+
+
+@dataclass(frozen=True, slots=True)
+class RuleMetadata:
+    """Versioned, auditable description of one rule, kept apart from ``Rule``."""
+
+    rule_id: str
+    severity: Severity
+    version: str = DEFAULT_RULE_VERSION
+    tolerance: Tolerance | None = None
+    provenance: Provenance = BUILT_IN_PROVENANCE
+
+    def __post_init__(self) -> None:
+        if not self.rule_id.strip():
+            raise ValueError("Metadata rule_id must not be empty")
+        if not is_semver(self.version):
+            raise ValueError(f"Rule version {self.version!r} is not a valid semver string")
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +122,7 @@ class RuleFinding:
     message: str
     feature_id: str | int | None = None
     details: Metadata = field(default_factory=dict)
+    kind: FindingKind = FindingKind.RULE_VIOLATION
 
     def __post_init__(self) -> None:
         if not self.message.strip():
