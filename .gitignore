@@ -37,6 +37,7 @@ coverage-audit.json
 .pytest-tmp/
 artifacts/
 **/geoqc_output/
+!examples/geoqc_output/
 *_repaired.gpkg
 *_report.json
 *_report.html
