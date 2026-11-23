@@ -8,6 +8,14 @@ All notable changes to GeoQC are documented here. This project follows
 
 ### Added
 
+- Findings now carry `kind`, `rule_version` and `provenance`. JSON issues add
+  `kind`, `rule_version` and `provenance` (`origin`, `source`) after the
+  existing keys. GeoPackage issue layers add `kind`, `rule_version`,
+  `provenance_origin` and `provenance_source` after the existing columns. The
+  HTML report shows kind, rule version and source on each issue. Existing
+  fields are unchanged. Values default to `rule_violation`, `1.0.0` and
+  built-in/geoqc.
+- Unconnected road ends graded info are tagged `contextual_inconsistency`.
 - Rule contract in `geoqc.domain.rules`: `FindingKind`, `Tolerance`,
   `Provenance`, `ProvenanceOrigin` and `RuleMetadata` (semver `version`,
   default `1.0.0`). `RuleFinding` and `AuditIssue` gain a `kind` field that

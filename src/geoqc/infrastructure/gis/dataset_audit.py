@@ -18,7 +18,7 @@ from geoqc.domain.models import (
     QualityProfile,
 )
 from geoqc.domain.models.topology import DatasetIssue, TopologyRuleType
-from geoqc.domain.rules import Severity
+from geoqc.domain.rules import FindingKind, Severity
 from geoqc.infrastructure.gis.dataset_checks import (
     _METRIC_PRESETS,
     _attach_feature_ids,
@@ -114,6 +114,8 @@ def _merge_road_endpoints(
                     title="Road end",
                     message=f"Feature {feature} ends here with no other road nearby.",
                 )
+        if merged.severity is Severity.INFO:
+            merged = replace(merged, kind=FindingKind.CONTEXTUAL_INCONSISTENCY)
         replacements[id(keep)] = merged
     return [replacements.get(id(issue), issue) for issue in issues if id(issue) not in dropped]
 

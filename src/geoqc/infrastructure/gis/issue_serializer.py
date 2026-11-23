@@ -31,6 +31,10 @@ def issues_to_geodataframe(
             "related_feature_index": item.related_feature_index,
             "feature_id": item.feature_id,
             "related_feature_id": item.related_feature_id,
+            "kind": item.kind.value,
+            "rule_version": item.rule_version,
+            "provenance_origin": item.provenance.origin.value,
+            "provenance_source": item.provenance.source,
             "geometry": shapely.from_wkt(item.geometry_wkt),
         }
         for item in selected
@@ -53,6 +57,10 @@ def issues_to_geodataframe(
         "related_feature_index",
         "feature_id",
         "related_feature_id",
+        "kind",
+        "rule_version",
+        "provenance_origin",
+        "provenance_source",
         "geometry",
     ]
     output_crs = (

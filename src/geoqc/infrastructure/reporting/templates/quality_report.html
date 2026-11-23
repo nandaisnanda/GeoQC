@@ -160,6 +160,7 @@
               <span class="badge {{ issue.severity.value }}">{{ issue.severity.value }}</span>
             </div>
             <p>{{ issue.description }}</p>
+            <p class="meta provenance">Kind: {{ issue.kind.value }} · Rule v{{ issue.rule_version }} · Source: {{ issue.provenance.origin.value }}, {{ issue.provenance.source }}</p>
             <p class="fix"><strong>Recommended action:</strong> {{ issue.recommendation }}</p>
             {% if issue.map_location %}
               <button class="map-action" type="button" data-map-issue="issue-{{ loop.index0 }}" aria-label="View {{ issue.title }} on map">
