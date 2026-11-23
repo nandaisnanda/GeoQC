@@ -10,3 +10,4 @@ Accepted, Superseded, or Rejected.
 - [0004: Dataset-level process parallelism for streaming audits](0004-dataset-level-parallel-streaming.md)
 - [0005: One canonical dataset audit result](0005-canonical-dataset-audit.md)
 - [0006: Rule contract metadata and finding kinds](0006-rule-contract.md)
+- [0007: QGIS plugin](0007-qgis-plugin.md)
