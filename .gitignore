@@ -36,6 +36,12 @@ coverage-audit.json
 .geoqc-osm-test/
 .pytest-tmp/
 artifacts/
+**/geoqc_output/
+*_repaired.gpkg
+*_report.json
+*_report.html
+*_issues.gpkg
+testdata/qc repaired*
 
 # Real-data validation tooling (tools/validation)
 tools/validation/data/

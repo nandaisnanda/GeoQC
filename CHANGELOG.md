@@ -6,6 +6,13 @@ All notable changes to GeoQC are documented here. This project follows
 
 ## [Unreleased]
 
+### Removed
+
+- Run outputs under `testdata/` (`geoqc_output/`, repaired GeoPackages and their
+  report) are no longer tracked in git. The `.gitignore` now covers
+  `geoqc_output/`, `*_repaired.gpkg`, `*_report.json`, `*_report.html` and
+  `*_issues.gpkg`.
+
 ### Changed
 
 - `geoqc fix` flags self-intersecting or non-simple lines as `self_intersection`
