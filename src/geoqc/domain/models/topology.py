@@ -6,7 +6,14 @@ from enum import StrEnum
 from hashlib import sha256
 from types import MappingProxyType
 
-from geoqc.domain.rules.models import Severity
+from geoqc.domain.rules.models import (
+    BUILT_IN_PROVENANCE,
+    DEFAULT_RULE_VERSION,
+    FindingKind,
+    Provenance,
+    Severity,
+    is_semver,
+)
 
 
 class RepairRisk(StrEnum):
@@ -188,6 +195,9 @@ class DatasetIssue:
     related_feature_id: str | int | None = None
     metadata: Mapping[str, str | int | float | bool | None] = field(default_factory=dict)
     check_name: str | None = None
+    kind: FindingKind = FindingKind.RULE_VIOLATION
+    rule_version: str = DEFAULT_RULE_VERSION
+    provenance: Provenance = BUILT_IN_PROVENANCE
 
     def __post_init__(self) -> None:
         for name in ("code", "issue_type", "title", "message", "category", "recommendation"):
@@ -195,6 +205,8 @@ class DatasetIssue:
                 raise ValueError(f"{name} must not be empty")
         if not self.geometry_wkt.strip():
             raise ValueError("geometry_wkt must not be empty")
+        if not is_semver(self.rule_version):
+            raise ValueError("rule_version must be a valid semver string")
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
     def __getstate__(self) -> list[object]:
@@ -249,6 +261,12 @@ class DatasetIssue:
             "feature_id": self.feature_id,
             "related_feature_id": self.related_feature_id,
             "metadata": dict(self.metadata),
+            "kind": self.kind.value,
+            "rule_version": self.rule_version,
+            "provenance": {
+                "origin": self.provenance.origin.value,
+                "source": self.provenance.source,
+            },
         }
 
     @property

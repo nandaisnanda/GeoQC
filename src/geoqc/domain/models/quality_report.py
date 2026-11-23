@@ -4,7 +4,13 @@ from dataclasses import dataclass
 from enum import StrEnum
 from math import isfinite
 
-from geoqc.domain.rules.models import Severity
+from geoqc.domain.rules.models import (
+    BUILT_IN_PROVENANCE,
+    DEFAULT_RULE_VERSION,
+    FindingKind,
+    Provenance,
+    Severity,
+)
 
 
 class QualityBadge(StrEnum):
@@ -52,6 +58,9 @@ class QualityReportIssue:
     recommendation: str
     location: str | None = None
     map_location: GeographicPoint | None = None
+    kind: FindingKind = FindingKind.RULE_VIOLATION
+    rule_version: str = DEFAULT_RULE_VERSION
+    provenance: Provenance = BUILT_IN_PROVENANCE
 
     def __post_init__(self) -> None:
         for field_name in ("code", "title", "description", "category", "recommendation"):

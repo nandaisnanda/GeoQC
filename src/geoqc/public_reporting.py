@@ -55,6 +55,9 @@ def build_quality_report(result: DatasetAuditResult) -> QualityReport:
                 else item.layer or result.dataset_name
             ),
             map_location=locate(item.geometry_wkt),
+            kind=item.kind,
+            rule_version=item.rule_version,
+            provenance=item.provenance,
         )
         for item in result.issues
     )
