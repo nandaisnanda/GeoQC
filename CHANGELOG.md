@@ -6,6 +6,16 @@ All notable changes to GeoQC are documented here. This project follows
 
 ## [Unreleased]
 
+### Added
+
+- Rule contract in `geoqc.domain.rules`: `FindingKind`, `Tolerance`,
+  `Provenance`, `ProvenanceOrigin` and `RuleMetadata` (semver `version`,
+  default `1.0.0`). `RuleFinding` and `AuditIssue` gain a `kind` field that
+  defaults to `RULE_VIOLATION`, and `AuditIssue` gains `rule_version` and
+  `provenance`. `RuleRegistry.register()` accepts optional metadata and
+  validates semver; `RuleRegistry.metadata()` reads it back. The `Rule`
+  protocol and `AuditIssue.to_dict()` output are unchanged. See ADR 0006.
+
 ### Removed
 
 - Run outputs under `testdata/` (`geoqc_output/`, repaired GeoPackages and their
