@@ -37,12 +37,13 @@ coverage-audit.json
 .pytest-tmp/
 artifacts/
 **/geoqc_output/
-!examples/geoqc_output/
 *_repaired.gpkg
 *_report.json
 *_report.html
 *_issues.gpkg
 testdata/qc repaired*
+!examples/geoqc_output/
+!examples/geoqc_output/*
 
 # Real-data validation tooling (tools/validation)
 tools/validation/data/
