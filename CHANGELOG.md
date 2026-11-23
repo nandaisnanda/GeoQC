@@ -8,6 +8,10 @@ All notable changes to GeoQC are documented here. This project follows
 
 ### Added
 
+- `geoqc check` on a multi-layer GeoPackage reports `CRS-LAYER-MISMATCH` (warning)
+  for each layer whose CRS differs from the baseline layer. It shows in the terminal,
+  JSON, issue GeoPackage and HTML report. Layers without a CRS are not counted,
+  and nothing is reprojected or assigned.
 - Findings now carry `kind`, `rule_version` and `provenance`. JSON issues add
   `kind`, `rule_version` and `provenance` (`origin`, `source`) after the
   existing keys. GeoPackage issue layers add `kind`, `rule_version`,

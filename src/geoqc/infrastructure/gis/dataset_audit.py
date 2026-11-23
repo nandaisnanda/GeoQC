@@ -278,6 +278,25 @@ def _audit_file_impl(
     )
 
 
+def with_extra_issues(
+    result: DatasetAuditResult,
+    extra: Sequence[DatasetIssue],
+    profile: QualityProfile | None,
+) -> DatasetAuditResult:
+    """Return ``result`` plus ``extra`` issues, rescored, keeping metadata and exporter."""
+    if not extra:
+        return result
+    rebuilt = _rebuild_result(
+        result, [*result.issues, *extra], profile.scoring if profile else None
+    )
+    return replace(
+        rebuilt,
+        metadata=result.metadata,
+        checks=_checks_for_result(rebuilt, profile),
+        _exporter=result._exporter,
+    )
+
+
 def audit_layers(
     frames: Mapping[str, gpd.GeoDataFrame], *, profile: QualityProfile
 ) -> DatasetAuditResult:

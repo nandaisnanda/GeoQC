@@ -123,6 +123,19 @@ and `2` for input, profile, or output errors. `--minimum-score` and `--fail-on`
 override gate thresholds for one invocation. See the
 [dataset quality workflow](quality-workflow.md) for result and profile schemas.
 
+#### CRS differences between layers
+
+When a multi-layer GeoPackage is checked without `--layer`, `check` compares the
+declared CRS of its layers with the same scanner as `crs-scan`. The baseline is
+the first layer with a CRS in name order. Each layer whose CRS differs gets one
+`CRS-LAYER-MISMATCH` finding: severity `warning`, kind `rule_violation`, rule
+version `1.0.0`, provenance built-in. It appears in the terminal (`CRS: Layer
+'x' uses ...`), in that layer's issue GeoPackage and HTML report, and in JSON
+reports for the same result. Layers with no CRS are not mismatches; they keep the
+existing `META-MISSING_CRS` finding and its hint. `check` never reprojects a
+layer or assigns a CRS. Comparing separate input files is still done with
+`geoqc crs-scan`; `check` takes one dataset.
+
 Folder discovery is deterministic and scans one level deep by default; pass
 `--recursive` (`-r`) to descend into subdirectories. Supported suffixes are
 `.gpkg`, `.shp`, `.geojson`, `.json`, and `.parquet`. Worker selection is
