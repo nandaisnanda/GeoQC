@@ -12,6 +12,7 @@ _HIDDEN = ["batch", "html-report", "crs-scan", "axis-order", "datum-shift"]
 
 
 def _listed_commands(output: str) -> list[str]:
+    output = re.sub(r"\x1b\[[0-9;]*m", "", output)
     block = re.split(r"[-─] Commands", output, maxsplit=1)[1]
     return re.findall(r"^[|│] (\S+)\s", block, flags=re.MULTILINE)
 
