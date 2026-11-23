@@ -1,9 +1,10 @@
 # 0007: QGIS plugin
 
-Status: Proposed
+Status: Accepted
 
-Items marked **[CONFIRM]** are open. The status stays Proposed until the
-owner settles them. They are collected in "Open decisions" at the end.
+The owner settled the six open items (C1 to C6). "Decisions taken" at the end
+lists each one with its outcome, followed by the Phase 1 requirements and the
+known limitations.
 
 ## Context
 
@@ -31,7 +32,9 @@ What the spike leaves open:
 - `run()` installs and runs on the UI thread. A first install can take up to
   600 s (`install_geoqc` timeout) and freezes QGIS for that long.
 - `GEOQC_SPEC` defaults to `geoqc`, which assumes a published package.
-  **[CONFIRM C6]**
+  `pip index versions geoqc` on 2026-11-23 lists one version, 0.1.0, by the
+  same author and repository. `pyproject.toml` is at 0.2.0. A plain `geoqc`
+  install therefore gets 0.1.0, not the current code.
 - `metadata.txt` has placeholder `tracker` and `repository` URLs.
 - `plugin.py` uses `Qgis.Critical` and `Qgis.Success`. QGIS 4 moves to scoped
   enums, so these lines need a Qt6 compatibility check.
@@ -44,7 +47,7 @@ The plugin graduates from `tools/qgis_spike/` to its own directory. The code
 splits in two halves so most of it tests without QGIS.
 
 ```
-<plugin root>/geoqc_qgis/
+apps/qgis-plugin/geoqc_qgis/
   metadata.txt
   __init__.py            classFactory only
   plugin.py              menu, toolbar, provider registration
@@ -62,26 +65,29 @@ splits in two halves so most of it tests without QGIS.
   the subprocess and the venv.
 - `build.py` grows from a fixed three-file list to a recursive zip of the
   package directory.
-- Location of the plugin root: `tools/qgis_spike/` renamed, or a new
-  top-level `integrations/qgis/`. **[CONFIRM C2]** The repository rules
-  forbid new modules without a task, so the move belongs in the
-  implementation PR, not in this one.
+- Plugin root: `apps/qgis-plugin/`, next to `apps/web`. The move from
+  `tools/qgis_spike/` belongs in the first implementation PR, not in this
+  one.
 
 ### 2. Minimum QGIS version
 
-Use the current LTR as the floor and write the plugin against `qgis.PyQt`
-only, so one code base loads on QGIS 3 (Qt5) and QGIS 4 (Qt6).
+The floor is **3.44 LTR**. The plugin must also pass on QGIS 4.x (Qt6). Both
+are requirements from the first release. The plugin does not wait for 4.2 to
+get the LTR label.
 
-- Floor: **3.44 LTR**. **[CONFIRM C1]** The spike's 3.28 is two LTRs old and
-  QGIS no longer patches it.
-- QGIS 4.0 shipped on 2026-03-06. The 4.2 release is announced as the first
-  4.x LTR, scheduled for October 2026. When it reaches the LTR repository,
-  set `qgisMaximumVersion` to allow 4.x and add it to the test matrix.
+- The spike's 3.28 is two LTRs old and QGIS no longer patches it.
+- Write the plugin against `qgis.PyQt` only, and use scoped enums
+  (`Qgis.MessageLevel.Critical`, not `Qgis.Critical`), so one code base loads
+  on QGIS 3 (Qt5) and QGIS 4 (Qt6).
+- `metadata.txt` allows 4.x through `qgisMaximumVersion`. The test matrix
+  runs 3.44 LTR and the newest 4.x release.
+- A plugin version fails review if the `pyqgis4-checker` scan or the 4.x test
+  run fails.
 - Sources: [QGIS 4.0 and LTR plans](https://blog.qgis.org/2025/10/07/update-on-qgis-4-0-release-schedule-and-ltr-plans/),
   [QGIS roadmap](https://qgis.org/resources/roadmap/),
   [plugin migration to QGIS 4](https://plugins.qgis.org/docs/migrate-qgis4).
-  Search results disagreed on the exact 3.44 point release and whether 4.2
-  carries the LTR label yet. Check the roadmap page before merging.
+  Sources disagreed on the exact 3.44 point release and on whether 4.2 has
+  the LTR label yet. The decision does not depend on either.
 
 The interpreter inside QGIS does not limit GeoQC, because GeoQC runs in its
 own venv (section 3). The floor depends on Processing and `QgsTask` APIs, not
@@ -89,26 +95,33 @@ on GeoQC's Python 3.12 requirement.
 
 ### 3. Installing geoqc and its dependencies
 
-Keep the spike's approach: a private venv in the QGIS profile, `geoqc`
-installed with `uv pip` when `uv` exists and `pip` otherwise, run as a
-subprocess. The plugin never imports `geoqc`.
+Use a private venv in the QGIS profile, created with `python -m venv` and
+filled with `python -m pip install`. The plugin runs `geoqc` as a subprocess
+and never imports it. It does not use `uv`: the spike's `uv` branches go
+away.
+
+The user needs a system Python 3.12 or newer. The plugin finds one and
+reports a missing one in plain text.
 
 | Platform | Python for the venv | Notes |
 |----------|---------------------|-------|
-| Windows | `uv`, or a system Python 3.12+ on `PATH` | `sys.executable` is `qgis-bin.exe`. Skip `WindowsApps` stubs, as the spike does. |
-| macOS | `uv`, or Homebrew/python.org 3.12+ | Apple Silicon and Intel need matching wheels. The venv Python picks the right ones. |
-| Linux | `uv`, or system Python 3.12+ | Ubuntu 22.04 ships 3.10. Without `uv` the install fails with a clear message. |
+| Windows | System Python 3.12+ on `PATH` or the `py` launcher | `sys.executable` is `qgis-bin.exe`, so it cannot build the venv. Skip `WindowsApps` stubs, as the spike does. |
+| macOS | python.org or Homebrew 3.12+ | The venv Python picks wheels for Apple Silicon or Intel. |
+| Linux | System Python 3.12+ | Ubuntu 22.04 ships 3.10. Without a 3.12 interpreter the install stops with a message that names the version found. |
 
-Steps the installer takes: locate or fetch Python 3.12, create the venv,
-install a pinned geoqc version range, run `geoqc --version`, and compare it
-with the range the plugin expects. A mismatch asks the user to repair the
-environment through a menu action. The installer never runs at QGIS startup;
-it runs on the first algorithm call or from an explicit menu action, inside
-a `QgsTask`.
+Steps the installer takes: locate Python 3.12+, create the venv, install a
+pinned geoqc version range, run `geoqc --version`, and compare it with the
+range the plugin expects. A mismatch asks the user to repair the environment
+through a menu action. The installer never runs at QGIS startup. It runs on
+the first algorithm call or from an explicit menu action, always inside a
+`QgsTask` (see Phase 1 requirements).
 
-Offline machines: support `GEOQC_SPEC` pointing at a wheel or a wheelhouse
-directory, as the spike does for local builds. A documented offline path is
-needed before an Indonesian agency deployment. **[CONFIRM C5]**
+`GEOQC_SPEC` stays as an override for a wheel or project path during
+development. Offline installs are a known limitation (C5).
+
+PyPI currently serves geoqc 0.1.0 only, while the repository is at 0.2.0.
+The plugin's pinned range needs a published release that contains the CLI
+commands the plugin calls. Publishing is outside this ADR.
 
 ### 4. QgsTask
 
@@ -136,7 +149,7 @@ two algorithms:
   per `AGENTS.md`. The user previews the output before using it.
 
 The menu entry and toolbar button open these algorithms through the standard
-Processing dialog. v1 has no custom dialog. **[CONFIRM C3]**
+Processing dialog. v1 has no custom dialog. A dock panel comes in v2.
 
 Algorithms live in the Processing toolbox, the Graphical Modeler, batch mode
 and `qgis_process`, so the same checks run headless on a server.
@@ -168,14 +181,14 @@ progress, load output files, and show messages.
 | Unit | `runtime/` argument building, Python discovery logic with a faked `PATH`, report parsing, version-range check | No |
 | Processing | `processing.run` for both algorithms on `examples/sample_defects.gpkg`, run under `QgsApplication` in offscreen mode | Yes, headless |
 | Parity | Plugin output equals CLI output on the same input: same findings, same counts | Yes, headless |
-| Installer | Venv creation and install on Windows, macOS and Linux runners | No, uses real `uv` and `pip` |
+| Installer | Venv creation and install on Windows, macOS and Linux runners | No, uses real `python -m venv` and `pip` |
 | Manual | `TESTING.md` smoke on one real desktop per OS before each plugin release | Yes |
 
 - Headless runs use the official QGIS LTR container on Linux. Windows and
   macOS run the unit and installer layers on hosted runners. The desktop
   smoke test covers QGIS on those two systems.
-- Run the Processing and parity layers on 3.44 LTR now, and on 4.2 once it
-  is the LTR.
+- Run the Processing and parity layers on 3.44 LTR and on the newest 4.x
+  release. The 4.x run does not wait for an LTR label.
 - Existing tests stay untouched. New plugin tests live beside the plugin.
 
 ## Alternatives considered
@@ -207,24 +220,25 @@ Ship wheels or compiled packages in the plugin.
 
 - Gain: dependency isolation, GeoQC upgrades independently of QGIS, same
   binary as the CLI users run, crash in GeoQC cannot crash QGIS.
-- Cost: first run downloads packages, needs `uv` or Python 3.12, adds
+- Cost: first run downloads packages, needs Python 3.12, adds
   process start-up latency, and the plugin must manage the venv.
 
-### Bundling `uv` in the plugin
+### Using or bundling `uv`
 
-- Gain: removes the Python 3.12 requirement on Linux and Windows.
-- Cost: a platform-specific binary in the zip, and Gatekeeper and antivirus
-  prompts for unsigned executables.
-- Not adopted. Use `uv` when it is on `PATH`; otherwise ask the user to
-  install it. **[CONFIRM C4]**
+- Gain: `uv` can fetch Python 3.12, so users on Ubuntu 22.04 and similar
+  need no system interpreter. Installs run faster.
+- Cost: a platform-specific binary in the zip, Gatekeeper and antivirus
+  prompts for unsigned executables, and two install paths to test.
+- Rejected. The plugin uses `python -m venv` and `pip` only. Users without
+  Python 3.12 install it themselves.
 
 ### Custom dock widget instead of Processing
 
 - Gain: tailored layout, inline result table.
 - Cost: UI code to maintain, no modeler, batch or headless use, and a
   stronger pull to put logic in the widget.
-- Rejected for v1. A results dock can follow once the Processing path is
-  stable.
+- Deferred to v2. The dock panel follows once the Processing path is stable
+  and calls the same algorithms.
 
 ### Blocking calls on the UI thread (current spike)
 
@@ -236,7 +250,7 @@ Ship wheels or compiled packages in the plugin.
 
 - The plugin stays small and has no QC code. Engine changes reach QGIS
   without a plugin release.
-- Users need network access once, plus `uv` or Python 3.12 outside QGIS.
+- Users need network access once, plus Python 3.12 outside QGIS.
 - Support cost grows: the plugin must diagnose a broken venv, a missing
   Python and a version mismatch, and report each in plain text.
 - Two version axes exist: the QGIS floor and the geoqc range. Both go in
@@ -246,13 +260,46 @@ Ship wheels or compiled packages in the plugin.
 - No code changes in this PR. The implementation follows in later PRs, one
   per section.
 
-## Open decisions
+## Decisions taken
 
-| Id | Question | Proposed answer |
-|----|----------|-----------------|
-| C1 | QGIS minimum version | 3.44 LTR, with 4.2 added once it is LTR |
-| C2 | Plugin location in the repo | `integrations/qgis/geoqc_qgis/` |
-| C3 | v1 surface | Processing provider only, no custom dialog |
-| C4 | Bundle `uv` or require it | Require `uv` or Python 3.12, do not bundle |
-| C5 | Offline install path | Wheelhouse via `GEOQC_SPEC`, documented before agency use |
-| C6 | Is `geoqc` published on PyPI under that name? | Needs a yes or no. The spike assumes yes. |
+| Id | Question | Outcome |
+|----|----------|---------|
+| C1 | QGIS minimum version | 3.44 LTR. The plugin must also pass on 4.x (Qt6). It does not wait for 4.2 to become LTR. |
+| C2 | Plugin location | `apps/qgis-plugin/` |
+| C3 | v1 surface | Processing provider only. Dock panel in v2. |
+| C4 | `uv` | Not used. `python -m venv` and `pip`. |
+| C5 | Offline install | Deferred. Recorded as a known limitation. |
+| C6 | Is geoqc on PyPI? | Yes, but only 0.1.0. See below. |
+
+C6 result, from `pip index versions geoqc` on 2026-11-23:
+
+```
+geoqc (0.1.0)
+Available versions: 0.1.0
+```
+
+The PyPI metadata names Ananda Gunawan and links this repository. The
+repository is at 0.2.0, so the published package lags the code. A release
+that carries the commands the plugin needs comes before the plugin's first
+public version.
+
+## Phase 1 requirements
+
+Phase 1 is the first implementation PR series. These are release gates:
+
+1. The first install runs in a `QgsTask`. It never blocks the UI thread. The
+   spike's blocking `run()` does not carry over.
+2. Every `Qgis.Critical`, `Qgis.Success` and similar unscoped enum becomes
+   the scoped form that works on QGIS 3.44 and 4.x
+   (`Qgis.MessageLevel.Critical`, `Qgis.MessageLevel.Success`).
+3. The plugin passes on QGIS 3.44 LTR and on the newest 4.x release.
+
+## Known limitations
+
+- No offline install. The installer needs network access to PyPI on first
+  run (C5). `GEOQC_SPEC` with a local wheel works for developers only.
+- Python 3.12 or newer must exist outside QGIS. The plugin does not fetch it.
+- The published geoqc is 0.1.0, behind the repository's 0.2.0.
+- The spike has no recorded results on Windows, macOS or Linux. Phase 1
+  produces the first ones.
+- No dock panel until v2.
