@@ -37,10 +37,11 @@ from geoqc.application.benchmarking import BenchmarkReport
 from geoqc.application.parallel import ParallelBatchExecutor
 from geoqc.application.parallel.scheduler import TaskScheduler
 from geoqc.application.services import BatchProcessor
-from geoqc.domain.models import DatasetAuditResult, RepairStatus
+from geoqc.application.services.crs_scanner import layer_crs_mismatch_issues
+from geoqc.domain.models import DatasetAuditResult, DatasetSource, RepairStatus
 from geoqc.domain.models.spatial_intelligence import RoadNetworkRepairConfig
 from geoqc.domain.rules import Severity
-from geoqc.infrastructure.gis.dataset_audit import _SUPPORTED_SUFFIXES
+from geoqc.infrastructure.gis.dataset_audit import _SUPPORTED_SUFFIXES, with_extra_issues
 from geoqc.infrastructure.gis.dataset_checks import MISSING_CRS_MESSAGE
 from geoqc.infrastructure.gis.impact import ImpactSummary, load_impact
 from geoqc.infrastructure.gis.parallel_audit import (
@@ -53,6 +54,7 @@ from geoqc.infrastructure.gis.profile_loading import (
     list_builtin_presets,
     load_builtin_preset,
 )
+from geoqc.infrastructure.gis.pyogrio_crs_reader import PyogrioCrsMetadataReader
 from geoqc.infrastructure.gis.road_dataset_repair import RoadDatasetRepairer
 from geoqc.infrastructure.reporting import BenchmarkFormat, write_benchmark_report
 from geoqc.interfaces.cli.delivery import app as delivery_app
@@ -667,10 +669,21 @@ def check_dataset(
             )
             raise typer.Exit(code=2)
         worst = 0
+        try:
+            crs_mismatches = layer_crs_mismatch_issues(
+                [DatasetSource(str(source), name) for name in layers],
+                PyogrioCrsMetadataReader(),
+            )
+        except (OSError, ValueError):
+            crs_mismatches = {}
         for name in layers:
             try:
                 layer_profile = profile or _auto_profile(source, name)
                 layer_result = run_dataset_audit(source, layer=name, profile=layer_profile)
+                if name in crs_mismatches:
+                    layer_result = with_extra_issues(
+                        layer_result, [crs_mismatches[name]], layer_profile
+                    )
                 layer_impact = load_impact(layer_result, source, name)
                 written = (
                     []
@@ -693,6 +706,8 @@ def check_dataset(
             _echo_unmatched_rules(layer_profile, name)
             typer.echo(f"Layer: {name}")
             _echo_verdict(layer_result, layer_passed, _skips_road_checks(layer_profile))
+            if name in crs_mismatches:
+                typer.echo(f"CRS: {crs_mismatches[name].message}")
             for line in layer_impact.cli_lines():
                 typer.echo(line)
             for line in written:

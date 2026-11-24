@@ -10,8 +10,14 @@ from geoqc.domain.models import (
     CrsAuditStatus,
     DatasetCrsAudit,
     DatasetCrsMetadata,
+    DatasetIssue,
     DatasetSource,
+    IssueGeometryKind,
+    RepairRisk,
 )
+from geoqc.domain.rules import Severity
+
+CRS_LAYER_MISMATCH = "CRS-LAYER-MISMATCH"
 
 _INDONESIAN_CRS_NAME = re.compile(r"^(SRGI2013|DGN95)|^WGS 84 / UTM zone (4[6-9]|5[0-4])S$")
 _WKT_NAME = re.compile(r'^[A-Z0-9_]+\[\s*"([^"]+)"')
@@ -98,3 +104,50 @@ def _indonesian_label(canonical_wkt: str) -> str:
     if match is None or not _INDONESIAN_CRS_NAME.search(match.group(1)):
         return ""
     return f" Recognized Indonesian CRS: {match.group(1)}."
+
+
+def layer_crs_mismatch_issues(
+    sources: Iterable[DatasetSource], reader: CrsMetadataReader
+) -> dict[str, DatasetIssue]:
+    """Return one CRS-LAYER-MISMATCH warning per layer whose CRS differs from the baseline.
+
+    Reuses CrsConsistencyScanner, so the baseline is the first valid CRS in sorted
+    order. Layers without a CRS are not mismatches; the missing-CRS check reports them.
+    Nothing is reprojected and no CRS is assigned.
+    """
+    audit = CrsConsistencyScanner(reader).scan(sources)
+    baseline = audit.baseline
+    if baseline is None or baseline.crs is None:
+        return {}
+    issues: dict[str, DatasetIssue] = {}
+    for item in audit.mismatched_datasets:
+        layer = item.source.layer
+        if layer is None or item.crs is None:
+            continue
+        baseline_layer = baseline.source.layer or baseline.source.identifier
+        issues[layer] = DatasetIssue(
+            code=CRS_LAYER_MISMATCH,
+            issue_type="layer_crs_mismatch",
+            title="Layer CRS mismatch",
+            message=(
+                f"Layer {layer!r} uses {item.crs.display_name} but layer {baseline_layer!r} "
+                f"uses {baseline.crs.display_name}. No layer was reprojected and no CRS was "
+                "assigned."
+            ),
+            severity=Severity.WARNING,
+            category="metadata",
+            recommendation=(
+                "Confirm which CRS is correct, then reproject the other layers yourself "
+                "before overlaying or combining them."
+            ),
+            repair_risk=RepairRisk.NOT_REPAIRABLE,
+            geometry_kind=IssueGeometryKind.POINT,
+            geometry_wkt="POINT EMPTY",
+            layer=layer,
+            metadata={
+                "layer_crs": item.crs.display_name,
+                "baseline_layer": baseline_layer,
+                "baseline_crs": baseline.crs.display_name,
+            },
+        )
+    return issues
